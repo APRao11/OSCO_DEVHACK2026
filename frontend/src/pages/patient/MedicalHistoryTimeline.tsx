@@ -85,7 +85,12 @@ const FindingRow: React.FC<{ finding: Finding; entryDate: string | null; onOpenS
           )}
         </span>
         <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-forest">
-          <FileText size={11} /> p.{finding.page} · {provenanceLabel(finding)}
+          {finding.page != null && (
+            <>
+              <FileText size={11} /> p.{finding.page} ·{' '}
+            </>
+          )}
+          {provenanceLabel(finding)}
         </span>
       </button>
     </li>

@@ -35,7 +35,7 @@ export interface Finding {
   eventDate: string | null;
   datePrecision: 'day' | 'month' | 'year' | null;
   dateAlternatives: string[] | null;
-  /** Verified quote, exactly as it appears in the page text */
+  /** Verified quote, exactly as it appears in the page text (null for doctor-entered findings) */
   quote: string;
   page: number;
   /** Offsets into the stored page text, from the Quote Verifier */
@@ -43,7 +43,11 @@ export interface Finding {
   quoteEnd: number;
   matchType: 'exact' | 'approximate';
   /** patient_corrected: a patient's edit, which supersedes the finding it corrects */
-  sourceType: 'ai_extracted' | 'doctor_entered' | 'patient_corrected';
+  sourceType: 'ai_extracted' | 'doctor_entered' | 'patient_corrected' | 'doctor_corrected';
+  /** Set for doctor-entered findings: the clinical record they belong to (also their documentId) */
+  clinicalRecordId?: string | null;
+  editedBy?: { type: 'patient' | 'doctor'; name: string | null; at: string } | null;
+  reviewedBy?: { type: 'patient' | 'doctor'; name: string | null; at: string | null } | null;
   verificationStatus: 'unverified' | 'doctor_verified' | 'corrected' | 'rejected';
   /** Set when a correction replaced this finding */
   supersededBy?: string | null;
@@ -59,6 +63,9 @@ export interface SourcePage {
 
 export interface SourceDocument {
   id: string;
+  /** 'clinical_record': a record a doctor entered (no file; the record itself is the source) */
+  kind?: 'document' | 'clinical_record';
+  clinicalRecord?: { doctorName: string; facility: string | null; observations: string | null; createdAt: string };
   name: string;
   /** Absolute URL, or an /api/... path served to the logged-in patient only */
   fileUrl: string | null;
@@ -128,6 +135,9 @@ export interface RecordFlag {
   findingIds: string[];
   documentIds: string[];
   status: 'open' | 'resolved';
+  createdAt?: string;
+  /** Set when a doctor marked the flag resolved */
+  resolution?: { note: string; by: string | null; at: string } | null;
 }
 
 export interface ExtractionStats {
@@ -147,6 +157,8 @@ export interface PatientRecords {
   findings: Finding[];
   medicationHistories: MedicationHistory[];
   flags: RecordFlag[];
+  /** Findings a flag refers to that have since been corrected (shown as the version the flag was about) */
+  referencedFindings?: Finding[];
 }
 
 /** What the Source Viewer opens: one finding's evidence in one document. */

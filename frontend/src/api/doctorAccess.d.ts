@@ -16,3 +16,4 @@ export function getAccessRequest(requestId: string, options?: { demo?: boolean }
 export function cancelAccessRequest(requestId: string, options?: { demo?: boolean }): Promise<void>;
 export function getActiveAccess(patientId: string): { patientId: string; accessLevel: 'read' | 'edit'; accessExpiresAt: string } | null;
 export function decideDemoRequest(requestId: string, decision: 'approve' | 'deny'): Promise<void>;
+export function listMyAccessRequests(): Promise<ApprovedAccessRequest[]>;

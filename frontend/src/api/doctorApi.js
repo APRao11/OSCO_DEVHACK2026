@@ -51,3 +51,18 @@ export const doctorReviewApi = (publicId) => {
 
 /** The Authorization header for clients that fetch on their own (pdf.js in the Source Viewer). */
 export const doctorAuthHeader = auth;
+
+/** Mark a finding Doctor-verified (no other change). */
+export const verifyFinding = (publicId, findingId) =>
+	apiRequest(`${patientPath(publicId)}/findings/${encodeURIComponent(findingId)}/verify`, { method: 'POST', headers: auth() });
+
+/** Mark a review flag resolved, with a note saying how it was reviewed. */
+export const resolveFlag = (publicId, flagId, note) =>
+	apiRequest(`${patientPath(publicId)}/flags/${encodeURIComponent(flagId)}/resolve`, { method: 'POST', body: JSON.stringify({ note }), headers: auth() });
+
+/** Add a clinical record: { consultationDate, facility, diagnoses, prescriptions, investigations, observations }. */
+export const addClinicalRecord = (publicId, record) =>
+	apiRequest(`${patientPath(publicId)}/clinical-records`, { method: 'POST', body: JSON.stringify(record), headers: auth() });
+
+/** This doctor's requests from the last 24 hours (pending and approved), newest first. */
+export const listAccessRequests = () => apiRequest('/api/doctor/access-requests', { headers: auth() });

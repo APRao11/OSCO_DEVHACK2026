@@ -277,7 +277,8 @@ const FindingSummary: React.FC<{
   );
 };
 
-const EditFindingForm: React.FC<{
+/** The correction form, also used inline by the doctor's Alert and Reviews tab. */
+export const EditFindingForm: React.FC<{
   finding: ExtractedFinding;
   saving: boolean;
   onCancel: () => void;

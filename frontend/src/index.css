@@ -110,3 +110,23 @@
 @media (prefers-reduced-motion: reduce) {
   .brief-fade-in { animation: none; }
 }
+
+/* Doctor tabs: shared patient components (FindingsReview, its edit form) render in the
+   Bone & Aubergine palette by remapping the colour tokens they use. Markup is unchanged. */
+.theme-doctor {
+  --color-forest: var(--color-aubergine);
+  --color-forest-dark: var(--color-aubergine-raised);
+  --color-eucalyptus-subtle: var(--color-plum-mist);
+  --color-eucalyptus-dark: var(--color-moss);
+  --color-citron: var(--color-sage);
+  --color-citron-subtle: var(--color-bone);
+  --color-osco-bg: var(--color-bone);
+  --color-text-main: var(--color-aubergine);
+  --color-text-secondary: var(--color-ink-muted);
+  --color-text-muted: var(--color-ink-muted);
+  --color-border-subtle: var(--color-hairline);
+  --color-border-medium: var(--color-hairline);
+  --color-warning: var(--color-brick);
+  --color-warning-subtle: var(--color-brick-soft);
+  font-family: var(--font-inter);
+}

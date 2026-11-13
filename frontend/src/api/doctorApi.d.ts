@@ -23,3 +23,17 @@ export function getPatientRecords(publicId: string): Promise<{
 }>;
 export function doctorReviewApi(publicId: string): ReviewApi;
 export function doctorAuthHeader(): Record<string, string>;
+
+export interface ClinicalRecordInput {
+  consultationDate: string;
+  facility?: string;
+  diagnoses?: { name: string; status: 'present' | 'absent' | 'possible' | 'historical' }[];
+  prescriptions?: { name: string; dose?: string; frequency?: string; action: 'start' | 'continue' | 'change' | 'stop' }[];
+  investigations?: { name: string; value?: string; unit?: string; refRange?: string }[];
+  observations?: string;
+}
+
+export function verifyFinding(publicId: string, findingId: string): Promise<unknown>;
+export function resolveFlag(publicId: string, flagId: string, note: string): Promise<unknown>;
+export function addClinicalRecord(publicId: string, record: ClinicalRecordInput): Promise<{ data: { record: { id: string; findings: unknown[] } } }>;
+export function listAccessRequests(): Promise<{ data: { requests: DoctorAccessRequest[] } }>;

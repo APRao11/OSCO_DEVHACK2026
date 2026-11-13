@@ -2,7 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, History, Lock, SquarePen, TriangleAlert } from 'lucide-react';
 import { getActiveAccess, isDemoPatient } from '../../api/doctorAccess';
 import { EmergencyBriefReport } from './EmergencyBriefReport';
-import { DoctorMedicalRecords, DoctorReport } from './DoctorPatientRecords';
+import DoctorReportTab from './DoctorReportTab';
+import DoctorTimeline from './DoctorTimeline';
+import DoctorAlerts from './DoctorAlerts';
+import DoctorAddRecord from './DoctorAddRecord';
+
+const TABS = {
+  'emergency-brief': DoctorReportTab,
+  'medical-history': DoctorTimeline,
+  'review-verification': DoctorAlerts,
+  'add-record': DoctorAddRecord,
+};
 
 /**
  * The four record sections. navId matches the existing sidebar items, so the
@@ -54,6 +64,7 @@ export default function PatientRecord({ patient, activeNavId, onNavigate, onAcce
   const leave = () => onAccessEndedRef.current();
 
   const section = RECORD_SECTIONS.find((s) => s.navId === activeNavId) ?? RECORD_SECTIONS[0];
+  const Tab = TABS[section.navId] ?? DoctorReportTab;
 
   return (
     <div className="space-y-4 font-inter text-aubergine">
@@ -86,31 +97,27 @@ export default function PatientRecord({ patient, activeNavId, onNavigate, onAcce
         </p>
       </div>
 
-      {section.navId === 'emergency-brief' ? (
-        demo ? (
-          <EmergencyBriefReport onOpenTimeline={() => onNavigate('medical-history')} />
+      {demo ? (
+        section.navId === 'emergency-brief' ? (
+          <EmergencyBriefReport onOpenTimeline={() => onNavigate('medical-history')} onReview={() => onNavigate('review-verification')} />
         ) : (
-          <DoctorReport
-            patient={patient}
-            onAccessLost={leave}
-            onOpenTimeline={() => onNavigate('medical-history')}
-            onNavigateReview={() => onNavigate('review-verification')}
-          />
+          <SampleOnly label={section.label} />
         )
-      ) : section.navId === 'medical-history' && !demo ? (
-        <DoctorMedicalRecords patient={patient} onAccessLost={leave} />
       ) : (
-        <SectionToBuild label={section.label} />
+        <Tab key={section.navId} patient={patient} onAccessLost={leave} onNavigate={onNavigate} />
       )}
     </div>
   );
 }
 
-function SectionToBuild({ label }) {
+/** The sample patient has no real records behind it; only its Report mock-up is shown. */
+function SampleOnly({ label }) {
   return (
     <section className="brief-fade-in rounded-[28px] bg-bone p-8 sm:p-12">
-      <h1 className="font-fraunces text-[40px] font-medium leading-tight tracking-tight">{label}</h1>
-      <p className="mt-2 max-w-md text-sm leading-6 text-ink-muted">This section is next to be built. The Report tab has the patient's Emergency Brief.</p>
+      <h1 className="font-fraunces text-[44px] font-medium leading-[1.05] tracking-tight sm:text-[56px]">{label}</h1>
+      <p className="mt-3 max-w-lg text-sm leading-6 text-ink-muted">
+        This is the sample patient, which only has a Report mock-up. Look up a real patient by their Patient ID (OSCO-…) to use this tab.
+      </p>
     </section>
   );
 }

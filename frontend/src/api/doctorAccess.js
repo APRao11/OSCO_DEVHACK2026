@@ -11,7 +11,7 @@
  * still be shown. Nothing here approves a real request.
  */
 import { PATIENT } from '../data/emergencyBrief.mock';
-import { createAccessRequest, getAccessRequestStatus } from './doctorApi.js';
+import { createAccessRequest, getAccessRequestStatus, listAccessRequests } from './doctorApi.js';
 
 export const ACCESS_WINDOW_MINUTES = 60;
 export const DEMO_PATIENT_ID = PATIENT.publicId;
@@ -120,6 +120,16 @@ export async function getAccessRequest(requestId, { demo = false } = {}) {
 	const { data } = await getAccessRequestStatus(requestId);
 	rememberAccess(data.request);
 	return fromServer(data.request);
+}
+
+/**
+ * This doctor's recent real requests, so Find Patient can resume after a reload or a
+ * portal switch: pending ones to keep waiting on, approved ones with access to open.
+ */
+export async function listMyAccessRequests() {
+	const { data } = await listAccessRequests();
+	for (const request of data.requests) rememberAccess(request);
+	return data.requests.map(fromServer);
 }
 
 /** Stop waiting. A real request stays on record (consent history is kept) and simply expires. */

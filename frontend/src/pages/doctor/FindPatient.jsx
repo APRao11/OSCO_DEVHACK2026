@@ -7,6 +7,7 @@ import {
   DEMO_PATIENT_ID,
   decideDemoRequest,
   getAccessRequest,
+  listMyAccessRequests,
   submitAccessRequest,
 } from '../../api/doctorAccess';
 
@@ -40,6 +41,40 @@ export default function FindPatient({ onApproved }) {
   }, [onApproved]);
   const requestId = request?.id;
   const requestDemo = request?.demo ?? false;
+  // This doctor's recent requests from the server, so nothing is lost on a reload or portal switch.
+  const [recent, setRecent] = useState([]);
+  const [ignored, setIgnored] = useState(() => new Set());
+
+  useEffect(() => {
+    if (phase !== 'idle') return undefined;
+    let active = true;
+    listMyAccessRequests()
+      .then((list) => {
+        if (!active) return;
+        setRecent(list);
+        // Pick up a request that is still waiting for the patient (unless the doctor stopped waiting on it).
+        const pending = list.find((r) => r.status === 'pending' && !ignored.has(r.id));
+        if (pending) {
+          setRequest(pending);
+          setPhase('waiting');
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [phase, ignored]);
+
+  // Patients who approved and whose access has not expired: one entry per patient, the widest and latest access.
+  const activeAccess = Object.values(
+    recent
+      .filter((r) => r.status === 'approved' && r.accessExpiresAt && new Date(r.accessExpiresAt).getTime() > Date.now())
+      .reduce((byPatient, r) => {
+        const best = byPatient[r.patientId];
+        const better = !best || (r.accessLevel === 'edit' && best.accessLevel !== 'edit') || (r.accessLevel === best.accessLevel && r.accessExpiresAt > best.accessExpiresAt);
+        return better ? { ...byPatient, [r.patientId]: r } : byPatient;
+      }, {}),
+  );
 
   const submit = async (event) => {
     event.preventDefault();
@@ -100,7 +135,10 @@ export default function FindPatient({ onApproved }) {
   };
 
   const cancel = async () => {
-    if (request) await cancelAccessRequest(request.id, { demo: request.demo });
+    if (request) {
+      await cancelAccessRequest(request.id, { demo: request.demo });
+      setIgnored((set) => new Set(set).add(request.id));
+    }
     reset();
   };
 
@@ -119,6 +157,35 @@ export default function FindPatient({ onApproved }) {
           Enter the patient's ID to request access. No record is shown until the patient approves on their dashboard. Access lasts{' '}
           {ACCESS_WINDOW_MINUTES} minutes, at the level the patient grants.
         </p>
+
+        {(phase === 'idle' || phase === 'submitting') && activeAccess.length > 0 && (
+          <section className="mt-8 rounded-3xl bg-sage p-5 sm:p-6" aria-labelledby="active-access-heading">
+            <h2 id="active-access-heading" className="text-sm font-semibold">
+              Active access
+            </h2>
+            <p className="mt-0.5 text-xs text-aubergine/70">These patients approved your request. Open a record while the access lasts.</p>
+            <ul className="mt-3 space-y-2">
+              {activeAccess.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/70 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">{r.patient.name}</p>
+                    <p className="text-xs text-ink-muted">
+                      <span className="font-jetbrains">{r.patientId}</span> · {r.accessLevel === 'edit' ? 'View and correct' : 'View only'} ·{' '}
+                      <span className="font-jetbrains">{Math.max(0, Math.ceil((new Date(r.accessExpiresAt).getTime() - Date.now()) / 60_000))} min</span> left
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onApprovedRef.current(r)}
+                    className="rounded-full bg-aubergine px-4 py-2 text-sm font-semibold text-white hover:bg-aubergine-raised"
+                  >
+                    Open record
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {(phase === 'idle' || phase === 'submitting') && (
           <form onSubmit={submit} className="mt-8 rounded-3xl bg-chalk p-5 sm:p-6" noValidate>
