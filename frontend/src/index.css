@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest: #173B3A;
+  --color-forest-dark: #0e2524;
+  --color-forest-surface: #1e4644;
+  --color-forest-muted: #275250;
+  
+  --color-eucalyptus: #6E9991;
+  --color-eucalyptus-subtle: #EDF3F1;
+  --color-eucalyptus-dark: #557b74;
+  
+  --color-citron: #C7D957;
+  --color-citron-hover: #b8cb44;
+  --color-citron-subtle: #F6F9E5;
+  
+  --color-warning: #B65D4B;
+  --color-warning-subtle: #F9EDE9;
+  
+  --color-osco-bg: #F0F4F2;
+  --color-osco-card: #FFFFFF;
+  
+  --color-text-main: #192B2A;
+  --color-text-secondary: #71817E;
+  --color-text-muted: #96A5A2;
+  
+  --color-border-subtle: #DCE5E1;
+  --color-border-medium: #C8D6D1;
+
+  --font-heading: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-clinical: 'Instrument Serif', Georgia, serif;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #F0F4F2;
+    color: #192B2A;
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #192B2A;
+    letter-spacing: -0.02em;
+  }
+}
+
+.doctor-interface h1,
+.doctor-interface h2,
+.doctor-interface h3 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  letter-spacing: -0.01em;
+}
