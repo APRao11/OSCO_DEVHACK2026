@@ -5,7 +5,9 @@ import { pathToFileURL } from 'node:url';
 import { checkDatabase, pool } from './config/db.js';
 import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
+import accessRoutes from './routes/access.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import doctorRoutes from './routes/doctor.routes.js';
 import patientRoutes from './routes/patient.routes.js';
 
 export const createApp = () => {
@@ -17,6 +19,8 @@ export const createApp = () => {
 	app.use(express.json({ limit: '1mb' }));
 	app.use('/api/auth/patient', authRoutes);
 	app.use('/api/patients', patientRoutes);
+	app.use('/api/access', accessRoutes);
+	app.use('/api/doctor', doctorRoutes);
 
 	app.get('/health', (_req, res) => {
 		res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
