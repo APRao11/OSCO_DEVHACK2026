@@ -29,7 +29,8 @@ export async function apiRequest(path, options = {}) {
 		...options,
 		headers: {
 			Accept: 'application/json',
-			...(options.body ? { 'Content-Type': 'application/json' } : {}),
+			// JSON bodies only; for FormData the browser sets the multipart boundary itself.
+			...(typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
 			...options.headers,
 		},
 	});

@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import accessRoutes from './routes/access.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import doctorRoutes from './routes/doctor.routes.js';
+import documentRoutes from './routes/documents.routes.js';
 import patientRoutes from './routes/patient.routes.js';
 
 export const createApp = () => {
@@ -20,6 +21,7 @@ export const createApp = () => {
 	app.use('/api/auth/patient', authRoutes);
 	app.use('/api/patients', patientRoutes);
 	app.use('/api/access', accessRoutes);
+	app.use('/api/documents', documentRoutes);
 	app.use('/api/doctor', doctorRoutes);
 
 	app.get('/health', (_req, res) => {

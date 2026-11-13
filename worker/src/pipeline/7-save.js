@@ -26,23 +26,30 @@ const toSqlDate = (eventDate) => {
 /**
  * @param {import('pg').PoolClient} client  inside a transaction
  */
-export const save = async (client, { documentId, patientId, extractorVersion, documentType, pages, accepted, rejected, stats }) => {
+export const save = async (client, { documentId, patientId, extractorVersion, documentType, pages, accepted, rejected, stats, documentDate = null }) => {
+	// The stored page text must be the text this run's quote offsets point into. A re-run
+	// can read a page differently (for example after an OCR improvement), so it replaces
+	// the derived text; the original file itself is never changed.
 	for (const page of pages) {
 		await client.query(
 			`INSERT INTO document_pages (document_id, page_number, text_source, page_text, ocr_words)
 			 VALUES ($1, $2, $3, $4, $5)
-			 ON CONFLICT (document_id, page_number) DO NOTHING`,
+			 ON CONFLICT (document_id, page_number)
+			 DO UPDATE SET text_source = EXCLUDED.text_source, page_text = EXCLUDED.page_text, ocr_words = EXCLUDED.ocr_words`,
 			[documentId, page.pageNumber, page.source, page.text, page.ocrWords ? JSON.stringify(page.ocrWords) : null],
 		);
 	}
 
-	// A newer extractor_version replaces only this document's earlier, unreviewed AI results.
+	// A re-run replaces only this document's earlier, unreviewed AI results that this run did
+	// not produce again (identical findings keep their rows, so re-running is a no-op).
 	// Rows are retired, not deleted; doctor-reviewed findings are left alone.
+	const keep = accepted.map(claimFingerprint);
 	await client.query(
 		`UPDATE claims SET retired_at = now()
 		 WHERE document_id = $1 AND source_type = 'ai_extracted' AND verification_status = 'unverified'
-		   AND extractor_version <> $2 AND retired_at IS NULL`,
-		[documentId, extractorVersion],
+		   AND retired_at IS NULL
+		   AND NOT (extractor_version = $2 AND fingerprint = ANY($3::char(64)[]))`,
+		[documentId, extractorVersion, keep],
 	);
 
 	let inserted = 0;
@@ -88,9 +95,16 @@ export const save = async (client, { documentId, patientId, extractorVersion, do
 	await client.query(
 		`UPDATE documents
 		 SET status = 'ready', document_type = $2, page_count = $3, extractor_version = $4,
-		     extraction_stats = $5, processing_error = NULL, processed_at = now()
+		     extraction_stats = $5, processing_error = NULL, processed_at = now(),
+		     document_date = $6, document_date_text = $7, document_date_precision = $8, document_date_alternatives = $9
 		 WHERE id = $1`,
-		[documentId, documentType, pages.length, extractorVersion, JSON.stringify(stats)],
+		[
+			documentId, documentType, pages.length, extractorVersion, JSON.stringify(stats),
+			toSqlDate(documentDate?.event_date ?? null),
+			documentDate?.date_text ?? null,
+			documentDate?.date_precision ?? null,
+			documentDate?.date_alternatives ? JSON.stringify(documentDate.date_alternatives) : null,
+		],
 	);
 
 	return { claimsInserted: inserted };

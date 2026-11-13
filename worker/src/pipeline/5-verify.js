@@ -125,6 +125,8 @@ export const verifyFindings = (rawFindings, pages, { minQuoteChars = 8, maxQuote
 		pageCorrections: 0,
 		approximateMatches: 0,
 		multipleOccurrences: 0,
+		/** Findings kept without a date because their date was not in their quote */
+		datesDropped: 0,
 	};
 
 	const reject = (raw, reason, detail) => {
@@ -173,7 +175,14 @@ export const verifyFindings = (rawFindings, pages, { minQuoteChars = 8, maxQuote
 			if (field === 'name' && GENERAL_STATEMENT.test(value)) return false;
 			return !quoteContains(finding.quote, value);
 		});
-		if (missing.length) {
+		// A date that is not in the quote is usually the document's header date copied onto
+		// each row (e.g. a lab report's collection date). The finding never claims that date:
+		// it is dropped, the finding stays undated and falls back to the verified document
+		// date. The facts themselves (name, dose, value, unit) must still be in the quote.
+		if (missing.length === 1 && missing[0] === 'date_text') {
+			finding.date_text = null;
+			stats.datesDropped += 1;
+		} else if (missing.length) {
 			reject(raw, REJECTION_REASONS.FIELD_NOT_IN_QUOTE, `not in quote: ${missing.join(', ')}`);
 			continue;
 		}
@@ -200,4 +209,37 @@ export const verifyFindings = (rawFindings, pages, { minQuoteChars = 8, maxQuote
 	}
 
 	return { accepted, rejected, stats };
+};
+
+/**
+ * Verify the model's document date claim the same way as a finding: its quote
+ * must be on a page of this document (exact match after normalisation) and the
+ * date must be inside that quote. Otherwise the document is treated as undated.
+ *
+ * @param {{ date_text?: unknown, quote?: unknown, page?: unknown } | null} claim
+ * @returns {{ ok: true, date_text: string, quote: string, page: number, quote_start: number, quote_end: number }
+ *         | { ok: false, reason: string }}
+ */
+export const verifyDocumentDate = (claim, pages) => {
+	if (!claim) return { ok: false, reason: 'no document date given' };
+	const dateText = typeof claim.date_text === 'string' ? claim.date_text.trim() : '';
+	const quote = typeof claim.quote === 'string' ? claim.quote.trim() : '';
+	if (!dateText || !quote) return { ok: false, reason: 'document date without date_text or quote' };
+	if (!quoteContains(quote, dateText)) return { ok: false, reason: 'document date not inside its quote' };
+
+	const stated = Number.isInteger(claim.page) ? claim.page : Number(claim.page);
+	for (const page of searchOrder(stated, pages)) {
+		const match = findQuote(quote, page.text ?? '');
+		if (match) {
+			return {
+				ok: true,
+				date_text: dateText,
+				quote: page.text.slice(match.start, match.end),
+				page: page.pageNumber,
+				quote_start: match.start,
+				quote_end: match.end,
+			};
+		}
+	}
+	return { ok: false, reason: 'document date quote not found in the document' };
 };

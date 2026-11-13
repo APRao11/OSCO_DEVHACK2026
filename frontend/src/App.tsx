@@ -162,6 +162,10 @@ export function App() {
               setCurrentPatient(pt);
               setActiveItemId('emergency-brief');
             }}
+            onExitPatient={() => {
+              setCurrentPatient(null);
+              setActiveItemId('patient-records');
+            }}
             activeNavItemId={activeItemId}
             onNavigate={(id) => setActiveItemId(id)}
           />

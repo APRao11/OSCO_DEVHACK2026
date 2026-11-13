@@ -31,6 +31,33 @@
   --font-body: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-clinical: 'Instrument Serif', Georgia, serif;
+
+  /* Bone & Aubergine: doctor Emergency Brief palette. Change values here only. */
+  --color-bone: #EFEAE2;              /* main content area */
+  --color-chalk: #FBF9F6;             /* light cards */
+  --color-plum-mist: #E4DCEB;         /* Missing Information card */
+  --color-aubergine: #211B26;         /* dark card, primary text */
+  --color-aubergine-raised: #2E2735;  /* panels inside the dark card */
+  --color-aubergine-line: #403847;
+  --color-sage: #C5D3BC;              /* Major Medical Events card */
+  --color-slate: #4D5866;
+  --color-slate-soft: #DDE2E8;
+  --color-orchid: #8E7CC3;            /* AI-extracted dots */
+  --color-moss: #4F8A5B;              /* doctor-verified dots */
+  --color-ochre: #B8892B;             /* gaps, possible duplicates */
+  --color-ochre-soft: #F3E6C8;
+  --color-brick: #A8432F;             /* contradictions */
+  --color-brick-soft: #F2D9D2;
+  --color-apricot: #E39A6B;           /* review actions */
+  --color-ink-muted: #6E6577;
+  --color-hairline: #E2DBD1;
+  --color-prov-patient: #6B84A3;      /* Patient-provided */
+  --color-prov-ai: #8E7CC3;           /* AI-extracted */
+  --color-prov-doctor: #4F8A5B;       /* Doctor-verified */
+
+  --font-fraunces: 'Fraunces', Georgia, serif;
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-jetbrains: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @layer base {
@@ -70,4 +97,16 @@
   border-radius: 2px;
   color: transparent;
   padding: 0;
+}
+
+/* Emergency Brief: one quick fade-in on load, no other motion. */
+@keyframes brief-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.brief-fade-in {
+  animation: brief-fade-in 200ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brief-fade-in { animation: none; }
 }

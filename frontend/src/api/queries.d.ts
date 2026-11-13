@@ -27,3 +27,69 @@ export function getBackendHealth(): Promise<HealthResponse>;
 export function registerPatient(input: { name: string; email: string; password: string }): Promise<PatientAuthResponse>;
 export function loginPatient(input: { email: string; password: string }): Promise<PatientAuthResponse>;
 export function getPatientProfile(token: string): Promise<PatientProfileResponse>;
+
+export type ProcessingStatus = 'uploaded' | 'processing' | 'ready' | 'failed';
+
+export interface ProcessedDocument {
+  id: string;
+  name: string;
+  mimeType: string;
+  byteSize: number;
+  status: ProcessingStatus;
+  documentType: string | null;
+  pageCount: number | null;
+  uploadedAt: string;
+  processedAt: string | null;
+  error: string | null;
+  findingsCount: number;
+  documentDate: string | null;
+  documentDateText: string | null;
+  documentDatePrecision: 'day' | 'month' | 'year' | null;
+  documentDateAlternatives: string[] | null;
+  stats: {
+    returned: number;
+    accepted: number;
+    rejected: number;
+    rejectedByReason: Record<string, number>;
+    pageCorrections: number;
+  } | null;
+}
+
+export interface ExtractedFinding {
+  id: string;
+  category: 'condition' | 'medication' | 'allergy' | 'investigation' | 'event';
+  name: string;
+  nameNormalised: string;
+  subject: 'patient' | 'family' | 'other';
+  subjectRelation: string | null;
+  assertion: 'present' | 'absent' | 'possible' | 'historical';
+  action: string | null;
+  dose: string | null;
+  frequency: string | null;
+  value: string | null;
+  unit: string | null;
+  refRange: string | null;
+  dateText: string | null;
+  eventDate: string | null;
+  datePrecision: string | null;
+  quote: string;
+  page: number;
+  quoteStart: number;
+  quoteEnd: number;
+  sourceType: 'ai_extracted' | 'doctor_entered';
+  verificationStatus: string;
+}
+
+export interface UploadResult {
+  fileName: string;
+  error?: string;
+  duplicate?: boolean;
+  queued?: boolean;
+  queueError?: string | null;
+  document?: ProcessedDocument;
+}
+
+export function uploadDocuments(token: string, files: File[]): Promise<{ data: { results: UploadResult[] } }>;
+export function listDocuments(token: string): Promise<{ data: { documents: ProcessedDocument[] } }>;
+export function getDocumentFindings(token: string, documentId: string): Promise<{ data: { document: ProcessedDocument; findings: ExtractedFinding[] } }>;
+export function retryDocument(token: string, documentId: string): Promise<{ data: { document: ProcessedDocument } }>;
