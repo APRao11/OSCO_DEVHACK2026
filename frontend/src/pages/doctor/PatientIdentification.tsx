@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { findPatientAccountById } from '../../auth/patientStorage';
 import { Button } from '../../components/ui/Button';
 import { DOCTOR_PATIENTS_LIST } from '../../mock/doctorMockData';
 import type { PatientContext } from '../../types/navigation';
@@ -24,23 +23,6 @@ export const PatientIdentification: React.FC<PatientIdentificationProps> = ({
     }
 
     try {
-      const account = findPatientAccountById(enteredId);
-      if (account) {
-        onSelectPatient({
-          id: account.id,
-          name: account.name,
-          age: 0,
-          gender: '',
-          mrn: '',
-          dob: '',
-          primaryCondition: '',
-          status: 'needs_review',
-          confidence: 0,
-          lastUpdated: '',
-        });
-        return;
-      }
-
       const demoPatient = DOCTOR_PATIENTS_LIST.find(
         (patient) => patient.id.toLowerCase() === enteredId.toLowerCase(),
       );
