@@ -1,0 +1,21 @@
+{
+  "name": "mem3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@google/genai": "^3.3.0",
+    "bullmq": "^6.7.6",
+    "dotenv": "^18.0.10",
+    "ioredis": "^6.0.0",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.6.7"
+  }
+}
