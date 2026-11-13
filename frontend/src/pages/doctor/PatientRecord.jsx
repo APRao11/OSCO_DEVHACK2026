@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, History, Lock, SquarePen, TriangleAlert } from 'lucide-react';
-import { getActiveAccess } from '../../api/doctorAccess';
+import { getActiveAccess, isDemoPatient } from '../../api/doctorAccess';
 import { EmergencyBriefReport } from './EmergencyBriefReport';
+import { DoctorMedicalRecords, DoctorReport } from './DoctorPatientRecords';
 
 /**
  * The four record sections. navId matches the existing sidebar items, so the
@@ -18,8 +19,9 @@ const minutesLeft = (access) => (access ? Math.max(0, Math.ceil((new Date(access
 
 /**
  * Doctor's view of one patient after approval (MVP document 6.2.3).
- * Read-only access for 60 minutes: when it runs out the doctor goes back to
- * Find Patient and must ask again.
+ * Access lasts 60 minutes at the level the patient granted (view, or view and
+ * correct); when it runs out or the patient ends it, the doctor goes back to
+ * Find Patient and must ask again. The server checks consent on every request.
  *
  * @param {{ patient: { id: string, name: string }, activeNavId: string,
  *           onNavigate: (navId: string) => void, onAccessEnded: () => void }} props
@@ -46,6 +48,10 @@ export default function PatientRecord({ patient, activeNavId, onNavigate, onAcce
   }, [patient.id]);
 
   if (!access) return null;
+
+  // The sample patient shows the mock Report; real patients come from the server.
+  const demo = isDemoPatient(patient.id);
+  const leave = () => onAccessEndedRef.current();
 
   const section = RECORD_SECTIONS.find((s) => s.navId === activeNavId) ?? RECORD_SECTIONS[0];
 
@@ -76,12 +82,23 @@ export default function PatientRecord({ patient, activeNavId, onNavigate, onAcce
         </nav>
         <p className="inline-flex items-center gap-2 text-xs text-ink-muted" role="status">
           <Lock size={13} aria-hidden="true" />
-          Read-only access · <span className="font-jetbrains text-aubergine">{remaining} min</span> left
+          {access.accessLevel === 'edit' ? 'View and correct' : 'View only'} · <span className="font-jetbrains text-aubergine">{remaining} min</span> left
         </p>
       </div>
 
       {section.navId === 'emergency-brief' ? (
-        <EmergencyBriefReport onOpenTimeline={() => onNavigate('medical-history')} />
+        demo ? (
+          <EmergencyBriefReport onOpenTimeline={() => onNavigate('medical-history')} />
+        ) : (
+          <DoctorReport
+            patient={patient}
+            onAccessLost={leave}
+            onOpenTimeline={() => onNavigate('medical-history')}
+            onNavigateReview={() => onNavigate('review-verification')}
+          />
+        )
+      ) : section.navId === 'medical-history' && !demo ? (
+        <DoctorMedicalRecords patient={patient} onAccessLost={leave} />
       ) : (
         <SectionToBuild label={section.label} />
       )}

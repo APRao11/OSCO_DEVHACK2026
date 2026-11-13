@@ -70,3 +70,25 @@ export const restoreFinding = (token, documentId, findingId) =>
 /** Add a document's reviewed findings to the medical history. */
 export const confirmDocumentFindings = (token, documentId) =>
 	apiRequest(`/api/documents/${encodeURIComponent(documentId)}/confirm`, { method: 'POST', headers: authHeader(token) });
+
+/** The patient's access requests and access history (GET /api/access). @param {string} token */
+export const listAccessRequests = (token) => apiRequest('/api/access', { headers: authHeader(token) });
+
+/**
+ * Approve a doctor's request. access: grant what was asked, or 'read' for view only.
+ * @param {string} token @param {string} requestId @param {'read' | 'edit'} [access]
+ */
+export const approveAccessRequest = (token, requestId, access) =>
+	apiRequest(`/api/access/${encodeURIComponent(requestId)}/approve`, {
+		method: 'POST',
+		body: JSON.stringify(access ? { access } : {}),
+		headers: authHeader(token),
+	});
+
+/** @param {string} token @param {string} requestId */
+export const denyAccessRequest = (token, requestId) =>
+	apiRequest(`/api/access/${encodeURIComponent(requestId)}/deny`, { method: 'POST', headers: authHeader(token) });
+
+/** End an active access early. @param {string} token @param {string} sessionId */
+export const endAccessSession = (token, sessionId) =>
+	apiRequest(`/api/access/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST', headers: authHeader(token) });

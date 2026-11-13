@@ -3,9 +3,10 @@ import { ArrowUpRight, FileText, HeartPulse, Upload, UserRound } from 'lucide-re
 import type { PersonalHealthInfo, TimelineEvent, UploadedDocument } from '../../types/patient';
 import type { PatientContext } from '../../types/navigation';
 import { QRCodeCard } from '../../components/patient/QRCodeCard';
+import { AccessRequestsPanel } from '../../components/patient/AccessRequestsPanel';
 
 export interface PatientDashboardProps {
-  patient: Pick<PatientContext, 'id' | 'name'>;
+  patient: Pick<PatientContext, 'id' | 'name'> & { publicId?: string };
   healthInfo: PersonalHealthInfo;
   timelineEvents: TimelineEvent[];
   documents: UploadedDocument[];
@@ -30,8 +31,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         </h1>
         <p className="mt-2 text-sm text-text-secondary">Your health information, organized in one place.</p>
       </div>
-      <QRCodeCard patientId={patient.id} />
+      {/* The public Patient ID only; the internal ID is never shown or encoded (6.1.1). */}
+      {patient.publicId && <QRCodeCard patientId={patient.publicId} />}
     </header>
+
+    <AccessRequestsPanel />
 
     <section aria-label="Patient actions" className="grid gap-4 md:grid-cols-2">
       <button

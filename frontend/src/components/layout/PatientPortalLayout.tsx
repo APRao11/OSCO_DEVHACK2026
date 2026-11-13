@@ -54,7 +54,7 @@ const toUploadedDocument = (doc: ProcessedDocument): UploadedDocument => ({
 export interface PatientPortalLayoutProps {
   activeItemId: string;
   onNavigate: (itemId: string) => void;
-  patient: Pick<PatientContext, 'id' | 'name'>;
+  patient: Pick<PatientContext, 'id' | 'name'> & { publicId?: string };
 }
 
 export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({

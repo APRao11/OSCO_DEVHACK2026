@@ -1,17 +1,7 @@
 import React, { useEffect, useId, useState } from 'react';
-import { CheckCircle2, LoaderCircle, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import { getAuthToken } from '../../auth/patientStorage';
-import {
-  confirmDocumentFindings,
-  dismissFinding,
-  editFinding,
-  getDocumentFindings,
-  restoreFinding,
-  type ExtractedFinding,
-  type FindingEdit,
-  type ProcessedDocument,
-  type ReviewResponse,
-} from '../../api/queries.js';
+import { CheckCircle2, LoaderCircle, Lock, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import type { ExtractedFinding, FindingEdit, ProcessedDocument, ReviewResponse } from '../../api/queries.js';
+import { patientReviewApi, type ReviewApi } from './reviewApi';
 
 const CATEGORY_LABELS: Record<ExtractedFinding['category'], string> = {
   condition: 'Condition',
@@ -41,6 +31,7 @@ const formatDate = (iso: string | null) => {
   const [y, m, d] = iso.split('-');
   return d ? `${Number(d)} ${MONTHS[Number(m) - 1]} ${y}` : m ? `${MONTHS[Number(m) - 1]} ${y}` : y;
 };
+const formatWhen = (iso: string | null | undefined) => (iso ? formatDate(iso.slice(0, 10)) : null);
 
 const detailOf = (f: ExtractedFinding) =>
   f.category === 'medication'
@@ -49,29 +40,58 @@ const detailOf = (f: ExtractedFinding) =>
         .filter(Boolean)
         .join(' · ');
 
+type Viewer = 'patient' | 'doctor';
+
+/** "Edited by you", "Edited by patient", "Corrected by Dr X": who made this version. */
+const editedLabel = (finding: ExtractedFinding, viewer: Viewer): { text: string; tone: 'patient' | 'doctor' } | null => {
+  const by = finding.editedBy;
+  if (!by) return null;
+  const when = formatWhen(by.at);
+  if (by.type === 'doctor') return { text: `Corrected by ${by.name ?? 'a doctor'}${when ? ` · ${when}` : ''}`, tone: 'doctor' };
+  return { text: `${viewer === 'patient' ? 'Edited by you' : 'Edited by patient'}${when ? ` · ${when}` : ''}`, tone: 'patient' };
+};
+
+const removedLabel = (finding: ExtractedFinding, viewer: Viewer) => {
+  const by = finding.reviewedBy;
+  if (by?.type === 'doctor') return `Removed by ${by.name ?? 'a doctor'}`;
+  if (by?.type === 'patient') return viewer === 'patient' ? 'Removed by you' : 'Removed by patient';
+  return 'Removed';
+};
+
 export interface FindingsReviewProps {
-  document: ProcessedDocument;
+  document: Pick<ProcessedDocument, 'id'>;
   /** Called with the updated document after any review action */
-  onDocumentChange: (document: ProcessedDocument) => void;
+  onDocumentChange?: (document: ProcessedDocument) => void;
+  /** Where to send the actions; defaults to the logged-in patient */
+  api?: ReviewApi;
+  viewer?: Viewer;
+  /** False under view-only consent: findings are shown without edit controls */
+  canEdit?: boolean;
 }
 
 /**
- * The patient checks what was read from one document before it enters the
- * medical history: edit what is wrong, remove what is not theirs, then add the
- * rest. Edits are saved as new versions labelled "Edited by you"; the
- * document's own wording stays attached and visible.
+ * Review the findings read from one document: edit what is wrong, remove what
+ * does not belong, and (patients) add the rest to the medical history. Used by
+ * the patient's Upload page and the doctor's Medical History tab. Edits are
+ * saved as new versions attributed to whoever made them; the document's own
+ * wording stays attached and visible.
  */
-export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocumentChange }) => {
+export const FindingsReview: React.FC<FindingsReviewProps> = ({
+  document,
+  onDocumentChange,
+  api = patientReviewApi,
+  viewer = 'patient',
+  canEdit = true,
+}) => {
   const [findings, setFindings] = useState<ExtractedFinding[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) return undefined;
     let active = true;
-    getDocumentFindings(token, document.id)
+    api
+      .load(document.id)
       .then(({ data }) => {
         if (active) setFindings(data.findings);
       })
@@ -81,21 +101,16 @@ export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocu
     return () => {
       active = false;
     };
-  }, [document.id]);
+  }, [api, document.id]);
 
   /** Run one review action and take the server's updated list. */
-  const run = async (key: string, action: (token: string) => Promise<ReviewResponse>) => {
-    const token = getAuthToken();
-    if (!token) {
-      setError('Your session has ended. Log in again.');
-      return false;
-    }
+  const run = async (key: string, action: () => Promise<ReviewResponse>) => {
     setBusy(key);
     setError('');
     try {
-      const { data } = await action(token);
+      const { data } = await action();
       setFindings(data.findings);
-      onDocumentChange(data.document);
+      onDocumentChange?.(data.document);
       return true;
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'That did not work. Try again.');
@@ -110,8 +125,9 @@ export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocu
   if (findings.length === 0) {
     return (
       <p className="text-sm text-text-secondary">
-        No findings could be verified in this document. A finding is only shown when its exact wording, values and units are found in the document.
-        Clearer photos give better results.
+        {viewer === 'doctor'
+          ? 'No findings from this document are in the medical history.'
+          : 'No findings could be verified in this document. A finding is only shown when its exact wording, values and units are found in the document. Clearer photos give better results.'}
       </p>
     );
   }
@@ -121,7 +137,17 @@ export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocu
 
   return (
     <div className="space-y-3">
-      {pending.length > 0 ? (
+      {viewer === 'doctor' ? (
+        canEdit ? (
+          <p className="text-sm text-text-secondary">
+            Corrections are saved as new versions under your name; the original and the document’s wording stay viewable.
+          </p>
+        ) : (
+          <p className="flex items-center gap-1.5 text-sm text-text-secondary">
+            <Lock size={14} /> View-only access. Ask the patient for “view and correct” access to make changes.
+          </p>
+        )
+      ) : pending.length > 0 ? (
         <p className="text-sm text-text-secondary">
           Check what was read from this document. <span className="font-medium text-text-main">Edit</span> anything that is wrong,{' '}
           <span className="font-medium text-text-main">remove</span> anything that is not yours, then add the rest to your medical history.
@@ -143,18 +169,20 @@ export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocu
                 saving={busy === finding.id}
                 onCancel={() => setEditingId(null)}
                 onSave={async (changes) => {
-                  const ok = await run(finding.id, (token) => editFinding(token, document.id, finding.id, changes));
+                  const ok = await run(finding.id, () => api.edit(document.id, finding.id, changes));
                   if (ok) setEditingId(null);
                 }}
               />
             ) : (
               <FindingSummary
                 finding={finding}
+                viewer={viewer}
+                canEdit={canEdit}
                 busy={busy === finding.id}
                 disabled={busy !== null}
                 onEdit={() => setEditingId(finding.id)}
-                onDismiss={() => void run(finding.id, (token) => dismissFinding(token, document.id, finding.id))}
-                onRestore={() => void run(finding.id, (token) => restoreFinding(token, document.id, finding.id))}
+                onDismiss={() => void run(finding.id, () => api.dismiss(document.id, finding.id))}
+                onRestore={() => void run(finding.id, () => api.restore(document.id, finding.id))}
               />
             )}
           </li>
@@ -167,13 +195,13 @@ export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocu
         </p>
       )}
 
-      {pending.length > 0 && (
+      {api.confirm && pending.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-text-secondary">Nothing goes into your medical history until you add it.</p>
           <button
             type="button"
             disabled={busy !== null || editingId !== null}
-            onClick={() => void run('confirm', (token) => confirmDocumentFindings(token, document.id))}
+            onClick={() => void run('confirm', () => api.confirm!(document.id))}
             className="inline-flex items-center gap-2 rounded-lg bg-forest px-4 py-2.5 text-sm font-semibold text-white hover:bg-forest-dark disabled:opacity-60"
           >
             {busy === 'confirm' && <LoaderCircle size={15} className="animate-spin" />}
@@ -187,16 +215,20 @@ export const FindingsReview: React.FC<FindingsReviewProps> = ({ document, onDocu
 
 const FindingSummary: React.FC<{
   finding: ExtractedFinding;
+  viewer: Viewer;
+  canEdit: boolean;
   busy: boolean;
   disabled: boolean;
   onEdit: () => void;
   onDismiss: () => void;
   onRestore: () => void;
-}> = ({ finding, busy, disabled, onEdit, onDismiss, onRestore }) => {
+}> = ({ finding, viewer, canEdit, busy, disabled, onEdit, onDismiss, onRestore }) => {
   const dismissed = finding.reviewStatus === 'dismissed';
-  const qualifier = finding.subject !== 'patient' ? `${finding.subjectRelation ?? 'Family'} (not you)` : QUALIFIERS[finding.assertion];
+  const self = viewer === 'patient';
+  const qualifier = finding.subject !== 'patient' ? `${finding.subjectRelation ?? 'Family'} (not ${self ? 'you' : 'the patient'})` : QUALIFIERS[finding.assertion];
   const detail = detailOf(finding);
   const date = formatDate(finding.eventDate);
+  const edited = editedLabel(finding, viewer);
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div className={`min-w-0 ${dismissed ? 'opacity-60' : ''}`}>
@@ -206,35 +238,41 @@ const FindingSummary: React.FC<{
           {detail && <span className="text-xs text-text-secondary">{detail}</span>}
           {qualifier && <span className="rounded bg-osco-bg px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">{qualifier}</span>}
           {date && <span className="font-mono text-[10px] text-text-muted">{date}</span>}
-          {finding.sourceType === 'patient_corrected' && (
-            <span className="rounded bg-warning-subtle px-1.5 py-0.5 text-[10px] font-semibold text-warning">Edited by you</span>
+          {edited && (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${edited.tone === 'doctor' ? 'bg-eucalyptus-subtle text-forest' : 'bg-warning-subtle text-warning'}`}
+            >
+              {edited.text}
+            </span>
           )}
-          {finding.reviewStatus === 'confirmed' && (
+          {finding.reviewStatus === 'confirmed' && self && (
             <span className="rounded bg-eucalyptus-subtle px-1.5 py-0.5 text-[10px] font-semibold text-forest">In your history</span>
           )}
-          {dismissed && <span className="rounded bg-border-subtle px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">Removed</span>}
+          {dismissed && <span className="rounded bg-border-subtle px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">{removedLabel(finding, viewer)}</span>}
         </div>
         <p className="mt-1 text-xs text-text-secondary">
           Document says: “{finding.quote}” <span className="font-mono text-[10px] text-text-muted">· p.{finding.page}</span>
         </p>
       </div>
-      <div className="flex shrink-0 gap-1.5">
-        {busy && <LoaderCircle size={15} className="mt-1.5 animate-spin text-text-muted" />}
-        {dismissed ? (
-          <button type="button" disabled={disabled} onClick={onRestore} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-forest hover:bg-eucalyptus-subtle disabled:opacity-50">
-            <RotateCcw size={13} /> Restore
-          </button>
-        ) : (
-          <>
-            <button type="button" disabled={disabled} onClick={onEdit} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-forest hover:bg-eucalyptus-subtle disabled:opacity-50">
-              <Pencil size={13} /> Edit
+      {canEdit && (
+        <div className="flex shrink-0 gap-1.5">
+          {busy && <LoaderCircle size={15} className="mt-1.5 animate-spin text-text-muted" />}
+          {dismissed ? (
+            <button type="button" disabled={disabled} onClick={onRestore} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-forest hover:bg-eucalyptus-subtle disabled:opacity-50">
+              <RotateCcw size={13} /> Restore
             </button>
-            <button type="button" disabled={disabled} onClick={onDismiss} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-warning hover:bg-warning-subtle disabled:opacity-50">
-              <Trash2 size={13} /> Remove
-            </button>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <button type="button" disabled={disabled} onClick={onEdit} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-forest hover:bg-eucalyptus-subtle disabled:opacity-50">
+                <Pencil size={13} /> Edit
+              </button>
+              <button type="button" disabled={disabled} onClick={onDismiss} className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-warning hover:bg-warning-subtle disabled:opacity-50">
+                <Trash2 size={13} /> {self ? 'Remove' : 'Delete'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -291,7 +329,7 @@ const EditFindingForm: React.FC<{
   return (
     <form onSubmit={submit} className="space-y-3" aria-label={`Edit ${finding.name}`}>
       <p className="text-xs text-text-secondary">
-        Document says: “{finding.quote}”. Your edit is saved as your own correction, labelled “Edited by you”. The document’s wording is kept.
+        Document says: “{finding.quote}”. The change is saved as a new version under your name; the document’s wording is kept.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">

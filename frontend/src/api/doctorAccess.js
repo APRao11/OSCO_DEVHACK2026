@@ -1,133 +1,165 @@
 /**
- * Doctor access requests (MVP document 5.6, 6.2.2, 8.9).
+ * Doctor access requests (MVP document 5.6, 6.2.2, 8.9), used by FindPatient
+ * and PatientRecord.
  *
- * DEMO STORE. The backend does not yet expose POST /api/doctor/access-requests
- * or GET /api/doctor/access-requests/:id, and there is no doctor login, so
- * requests are kept in localStorage with the same shape and lifecycle:
- * pending -> approved | denied | expired. Approval gives read-only access for
- * 60 minutes. Replace these functions with apiRequest() calls when the
- * endpoints exist; FindPatient and PatientRecord only use this interface.
+ * Real Patient IDs (OSCO-XXXXXXXX) go to the backend: the patient approves or
+ * denies on their own dashboard, and approval opens a 60-minute session at the
+ * level they chose ("read" = view, "edit" = view and correct).
  *
- * Nothing here approves a request by itself: only decideDemoRequest() does,
- * and the UI labels that control as a demo stand-in for the patient's decision.
+ * The sample patient from src/data/emergencyBrief.mock.js keeps its local demo
+ * flow (with a labelled "patient approves" stand-in) so the Report mock-up can
+ * still be shown. Nothing here approves a real request.
  */
 import { PATIENT } from '../data/emergencyBrief.mock';
+import { createAccessRequest, getAccessRequestStatus } from './doctorApi.js';
 
-const STORE_KEY = 'osco.demo.doctorAccessRequests';
 export const ACCESS_WINDOW_MINUTES = 60;
-const REQUEST_TTL_HOURS = 24;
+export const DEMO_PATIENT_ID = PATIENT.publicId;
 
-/** Limited identification only (6.2.2): no medical data before approval. */
-const DIRECTORY = new Map([[PATIENT.publicId, { publicId: PATIENT.publicId, name: PATIENT.name, age: PATIENT.age, sex: PATIENT.sex }]]);
+const DEMO_STORE_KEY = 'osco.demo.doctorAccessRequests';
+const ACCESS_KEY = 'osco.doctorAccess'; // approved real sessions: { [publicId]: { accessLevel, expiresAt } }
+export const ACCESS_STORE_KEY = DEMO_STORE_KEY;
 
 export class AccessError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.name = 'AccessError';
-    this.code = code;
-  }
+	constructor(code, message) {
+		super(message);
+		this.name = 'AccessError';
+		this.code = code;
+	}
 }
-
-const readStore = () => {
-  try {
-    return JSON.parse(localStorage.getItem(STORE_KEY) ?? '[]');
-  } catch {
-    return [];
-  }
-};
-
-const writeStore = (requests) => {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(requests));
-  } catch {
-    // Storage unavailable: requests live only for this page load.
-  }
-};
-
-const minutesFromNow = (iso) => (new Date(iso).getTime() - Date.now()) / 60_000;
-
-/** Apply time-based transitions: pending requests and approved access both expire. */
-const withCurrentStatus = (request) => {
-  if (request.status === 'pending' && minutesFromNow(request.requestedAt) < -REQUEST_TTL_HOURS * 60) {
-    return { ...request, status: 'expired' };
-  }
-  if (request.status === 'approved' && minutesFromNow(request.accessExpiresAt) <= 0) {
-    return { ...request, status: 'expired' };
-  }
-  return request;
-};
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const normalisePatientId = (raw) => raw.trim().toUpperCase().replace(/\s+/g, '');
+export const isDemoPatient = (patientId) => normalisePatientId(patientId) === DEMO_PATIENT_ID;
+
+const readJson = (storage, key, fallback) => {
+	try {
+		return JSON.parse(storage.getItem(key) ?? 'null') ?? fallback;
+	} catch {
+		return fallback;
+	}
+};
+const writeJson = (storage, key, value) => {
+	try {
+		storage.setItem(key, JSON.stringify(value));
+	} catch {
+		// Storage unavailable: lasts for this page only.
+	}
+};
+
+// ------------------------------------------------------------ real (backend)
+
+/** Remember an approved session so PatientRecord can show the countdown. The server still checks every request. */
+const rememberAccess = (request) => {
+	if (request.status !== 'approved' || !request.session?.active) return;
+	const map = readJson(sessionStorage, ACCESS_KEY, {});
+	map[request.patient.publicId] = { accessLevel: request.session.accessLevel, expiresAt: request.session.expiresAt };
+	writeJson(sessionStorage, ACCESS_KEY, map);
+};
+
+/** Forget a session the server says has ended. */
+export const forgetAccess = (patientId) => {
+	const map = readJson(sessionStorage, ACCESS_KEY, {});
+	delete map[normalisePatientId(patientId)];
+	writeJson(sessionStorage, ACCESS_KEY, map);
+};
+
+/** Shape both real and demo requests the same way for the UI. */
+const fromServer = (request) => ({
+	id: request.id,
+	demo: false,
+	patientId: request.patient.publicId,
+	patient: { publicId: request.patient.publicId, name: request.patient.name, age: null, sex: null },
+	reason: request.purpose,
+	requestedAccess: request.requestedAccess,
+	status: request.status,
+	requestedAt: request.requestedAt,
+	decidedAt: request.decidedAt,
+	accessLevel: request.session?.accessLevel ?? null,
+	accessExpiresAt: request.session?.expiresAt ?? null,
+});
+
+// ------------------------------------------------------------ demo (sample patient)
+
+const DEMO_PATIENT = { publicId: PATIENT.publicId, name: PATIENT.name, age: PATIENT.age, sex: PATIENT.sex };
+const readDemo = () => readJson(localStorage, DEMO_STORE_KEY, []);
+const writeDemo = (list) => writeJson(localStorage, DEMO_STORE_KEY, list);
+const minutesFromNow = (iso) => (new Date(iso).getTime() - Date.now()) / 60_000;
+const demoStatus = (r) => (r.status === 'approved' && minutesFromNow(r.accessExpiresAt) <= 0 ? { ...r, status: 'expired' } : r);
+
+// ------------------------------------------------------------ interface used by the pages
 
 /**
- * Look up the Patient ID and submit an access request in one step.
- * @returns {Promise<object>} the pending request, with the patient's limited identification
+ * Submit an access request for a Patient ID.
+ * @param {{ patientId: string, reason: string, access?: 'read' | 'edit' }} input
  */
-export async function submitAccessRequest({ patientId, reason }) {
-  await delay(400);
-  const id = normalisePatientId(patientId);
-  const patient = DIRECTORY.get(id);
-  if (!patient) throw new AccessError('NOT_FOUND', 'No patient found with this ID. Check the ID and try again.');
-
-  const request = {
-    id: crypto.randomUUID(),
-    patientId: id,
-    patient,
-    reason,
-    status: 'pending',
-    requestedAt: new Date().toISOString(),
-    decidedAt: null,
-    accessExpiresAt: null,
-  };
-  writeStore([...readStore().map(withCurrentStatus), request]);
-  return request;
+export async function submitAccessRequest({ patientId, reason, access = 'read' }) {
+	const id = normalisePatientId(patientId);
+	if (id === DEMO_PATIENT_ID) {
+		const request = {
+			id: crypto.randomUUID(), demo: true, patientId: id, patient: DEMO_PATIENT, reason, requestedAccess: access,
+			status: 'pending', requestedAt: new Date().toISOString(), decidedAt: null, accessLevel: null, accessExpiresAt: null,
+		};
+		writeDemo([...readDemo(), request]);
+		return request;
+	}
+	try {
+		const { data } = await createAccessRequest({ patientId: id, purpose: reason, access });
+		return fromServer(data.request);
+	} catch (error) {
+		throw new AccessError(error.status === 404 ? 'NOT_FOUND' : 'FAILED', error.message || 'The request could not be sent. Try again.');
+	}
 }
 
-/** Current state of one request (polled by the waiting screen). */
-export async function getAccessRequest(requestId) {
-  await delay(150);
-  const request = readStore().find((r) => r.id === requestId);
-  if (!request) throw new AccessError('NOT_FOUND', 'This access request no longer exists.');
-  return withCurrentStatus(request);
+/** Current state of one request (polled while waiting). */
+export async function getAccessRequest(requestId, { demo = false } = {}) {
+	if (demo) {
+		const request = readDemo().find((r) => r.id === requestId);
+		if (!request) throw new AccessError('NOT_FOUND', 'This access request no longer exists.');
+		return demoStatus(request);
+	}
+	const { data } = await getAccessRequestStatus(requestId);
+	rememberAccess(data.request);
+	return fromServer(data.request);
 }
 
-/** Withdraw a request that is still pending. */
-export async function cancelAccessRequest(requestId) {
-  writeStore(readStore().filter((r) => r.id !== requestId || r.status !== 'pending'));
+/** Stop waiting. A real request stays on record (consent history is kept) and simply expires. */
+export async function cancelAccessRequest(requestId, { demo = false } = {}) {
+	if (demo) writeDemo(readDemo().filter((r) => r.id !== requestId || r.status !== 'pending'));
 }
 
-/** The approved, unexpired access for this patient, if any (read synchronously by PatientRecord). */
+/**
+ * The approved, unexpired access this doctor holds for a patient, or null.
+ * Used for the countdown only; the server re-checks consent on every request.
+ */
 export function getActiveAccess(patientId) {
-  const now = Date.now();
-  return (
-    readStore()
-      .map(withCurrentStatus)
-      .filter((r) => r.patientId === patientId && r.status === 'approved' && new Date(r.accessExpiresAt).getTime() > now)
-      .sort((a, b) => b.accessExpiresAt.localeCompare(a.accessExpiresAt))[0] ?? null
-  );
+	const id = normalisePatientId(patientId);
+	if (id === DEMO_PATIENT_ID) {
+		return (
+			readDemo()
+				.map(demoStatus)
+				.filter((r) => r.status === 'approved')
+				.sort((a, b) => b.accessExpiresAt.localeCompare(a.accessExpiresAt))[0] ?? null
+		);
+	}
+	const access = readJson(sessionStorage, ACCESS_KEY, {})[id];
+	if (!access || minutesFromNow(access.expiresAt) <= 0) return null;
+	return { patientId: id, accessLevel: access.accessLevel, accessExpiresAt: access.expiresAt };
 }
 
-/**
- * DEMO ONLY: stands in for the patient pressing Approve or Deny in their
- * portal, until the patient-side access requests panel calls
- * POST /api/access/:id/approve | /deny on the backend.
- */
+/** DEMO ONLY: stands in for the sample patient's decision. */
 export async function decideDemoRequest(requestId, decision) {
-  const now = new Date();
-  writeStore(
-    readStore().map((r) =>
-      r.id === requestId && r.status === 'pending'
-        ? {
-            ...r,
-            status: decision === 'approve' ? 'approved' : 'denied',
-            decidedAt: now.toISOString(),
-            accessExpiresAt: decision === 'approve' ? new Date(now.getTime() + ACCESS_WINDOW_MINUTES * 60_000).toISOString() : null,
-          }
-        : r,
-    ),
-  );
+	const now = new Date();
+	writeDemo(
+		readDemo().map((r) =>
+			r.id === requestId && r.status === 'pending'
+				? {
+						...r,
+						status: decision === 'approve' ? 'approved' : 'denied',
+						decidedAt: now.toISOString(),
+						accessLevel: decision === 'approve' ? 'read' : null,
+						accessExpiresAt: decision === 'approve' ? new Date(now.getTime() + ACCESS_WINDOW_MINUTES * 60_000).toISOString() : null,
+					}
+				: r,
+		),
+	);
 }
-
-export const ACCESS_STORE_KEY = STORE_KEY;

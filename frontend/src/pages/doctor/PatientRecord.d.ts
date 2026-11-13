@@ -9,7 +9,7 @@ export interface RecordSection {
 export const RECORD_SECTIONS: RecordSection[];
 
 export default function PatientRecord(props: {
-  patient: { id: string; name: string };
+  patient: import('../../types/navigation').PatientContext;
   activeNavId: string;
   onNavigate: (navId: string) => void;
   onAccessEnded: () => void;

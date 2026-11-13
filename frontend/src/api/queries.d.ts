@@ -10,6 +10,8 @@ export interface PatientProfile {
   name: string;
   email: string;
   createdAt: string;
+  /** Public Patient ID (OSCO-XXXXXXXX) a patient gives a doctor */
+  publicId: string;
 }
 
 export interface PatientAuthResponse {
@@ -79,10 +81,15 @@ export interface ExtractedFinding {
   page: number;
   quoteStart: number;
   quoteEnd: number;
-  sourceType: 'ai_extracted' | 'doctor_entered' | 'patient_corrected';
+  sourceType: 'ai_extracted' | 'doctor_entered' | 'patient_corrected' | 'doctor_corrected';
   verificationStatus: string;
   reviewStatus: 'pending' | 'confirmed' | 'dismissed';
   supersedesId: string | null;
+  previousReviewStatus: 'pending' | 'confirmed' | null;
+  /** Who made this version (corrections only) */
+  editedBy: { type: 'patient' | 'doctor'; name: string | null; at: string } | null;
+  /** Who last removed, restored or confirmed it */
+  reviewedBy: { type: 'patient' | 'doctor'; name: string | null; at: string | null } | null;
 }
 
 export interface UploadResult {
@@ -122,3 +129,20 @@ export function editFinding(token: string, documentId: string, findingId: string
 export function dismissFinding(token: string, documentId: string, findingId: string): Promise<ReviewResponse>;
 export function restoreFinding(token: string, documentId: string, findingId: string): Promise<ReviewResponse>;
 export function confirmDocumentFindings(token: string, documentId: string): Promise<ReviewResponse>;
+
+export interface PatientAccessRequest {
+  id: string;
+  status: 'pending' | 'active' | 'denied' | 'expired' | 'ended';
+  purpose: string;
+  requestedAccess: 'read' | 'edit';
+  approvedAccess: 'read' | 'edit' | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  doctor: { name: string; verified: boolean };
+  session: { id: string; accessLevel: 'read' | 'edit'; expiresAt: string; endedAt: string | null; active: boolean } | null;
+}
+
+export function listAccessRequests(token: string): Promise<{ data: { requests: PatientAccessRequest[] } }>;
+export function approveAccessRequest(token: string, requestId: string, access?: 'read' | 'edit'): Promise<unknown>;
+export function denyAccessRequest(token: string, requestId: string): Promise<unknown>;
+export function endAccessSession(token: string, sessionId: string): Promise<unknown>;

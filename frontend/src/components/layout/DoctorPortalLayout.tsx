@@ -6,6 +6,8 @@ import PatientRecord, { RECORD_SECTIONS } from '../../pages/doctor/PatientRecord
 import { DoctorDocuments } from '../../pages/doctor/DoctorDocuments';
 import { DoctorAssistantChat } from '../../pages/doctor/DoctorAssistantChat';
 import { DocumentViewerModal } from '../patient/DocumentViewerModal';
+import { DoctorLogin, DoctorStatusNotice } from '../../pages/doctor/DoctorLogin';
+import { clearDoctorSession, getDoctorProfile, getDoctorToken, type DoctorProfile } from '../../auth/doctorSession';
 
 export interface DoctorPortalLayoutProps {
   currentPatient: PatientContext | null;
@@ -22,8 +24,8 @@ const RECORD_NAV_IDS = new Set<string>(RECORD_SECTIONS.map((section) => section.
 const toPatientContext = (request: ApprovedAccessRequest): PatientContext => ({
   id: request.patientId,
   name: request.patient.name,
-  age: request.patient.age,
-  gender: request.patient.sex,
+  age: request.patient.age ?? 0,
+  gender: request.patient.sex ?? '',
   mrn: '',
   dob: '',
   primaryCondition: '',
@@ -33,7 +35,8 @@ const toPatientContext = (request: ApprovedAccessRequest): PatientContext => ({
 });
 
 /**
- * Doctor portal (MVP document 6.2). Without an approved patient the doctor
+ * Doctor portal (MVP document 6.2). The doctor signs in first; unverified
+ * doctors only see their status. Without an approved patient the doctor
  * sees Find Patient; after approval, the patient record with its four
  * sections. The existing sidebar items for those sections drive the same view.
  */
@@ -45,9 +48,29 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
   onNavigate,
 }) => {
   const [selectedDocument, setSelectedDocument] = useState<UploadedDocument | null>(null);
+  const [doctor, setDoctor] = useState<DoctorProfile | null>(() => (getDoctorToken() ? getDoctorProfile() : null));
+
+  const signOut = () => {
+    clearDoctorSession();
+    setDoctor(null);
+    onExitPatient();
+  };
+
+  if (!doctor) return <DoctorLogin onLoggedIn={setDoctor} />;
+  if (doctor.verificationStatus !== 'verified') return <DoctorStatusNotice profile={doctor} onLogout={signOut} />;
 
   if (!currentPatient) {
-    return <FindPatient onApproved={(request) => onSelectPatient(toPatientContext(request))} />;
+    return (
+      <div className="space-y-3">
+        <p className="text-right font-inter text-xs text-ink-muted">
+          Signed in as <span className="font-medium text-aubergine">{doctor.name}</span> ·{' '}
+          <button type="button" onClick={signOut} className="font-medium text-aubergine hover:underline">
+            Sign out
+          </button>
+        </p>
+        <FindPatient onApproved={(request) => onSelectPatient(toPatientContext(request))} />
+      </div>
+    );
   }
 
   // Sidebar items outside the four record sections keep their existing pages.

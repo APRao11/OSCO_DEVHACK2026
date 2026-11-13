@@ -10,6 +10,8 @@ export interface PatientAccount {
   name: string;
   email: string;
   createdAt: string;
+  /** Public Patient ID (OSCO-XXXXXXXX), shown to the patient to give to a doctor */
+  publicId?: string;
 }
 
 export interface PatientData {

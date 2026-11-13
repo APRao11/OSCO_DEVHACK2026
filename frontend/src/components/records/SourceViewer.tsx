@@ -8,6 +8,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { layoutTextItems } from '../../utils/pdfTextLayout.js';
 import { apiUrl } from '../../api/queries.js';
 import { getAuthToken } from '../../auth/patientStorage';
+import { getDoctorToken } from '../../auth/doctorSession';
 import { DOCUMENT_TYPE_LABELS, formatRecordDate } from '../../records/format';
 import type { SourceTarget } from '../../types/records';
 
@@ -72,7 +73,8 @@ const SourceViewerDialog: React.FC<{ target: SourceTarget; onClose: () => void }
   const file = useMemo(() => {
     if (!doc.fileUrl) return null;
     if (!doc.fileUrl.startsWith('/api/')) return doc.fileUrl;
-    const token = getAuthToken();
+    // Doctor routes need the doctor's token (and the patient's consent, checked by the server).
+    const token = doc.fileUrl.startsWith('/api/doctor/') ? getDoctorToken() : getAuthToken();
     return { url: apiUrl(doc.fileUrl), httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined };
   }, [doc.fileUrl]);
 

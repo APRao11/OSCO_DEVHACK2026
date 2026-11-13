@@ -152,7 +152,7 @@ export function App() {
             activeItemId={activeItemId}
             onNavigate={(id) => setActiveItemId(id)}
             key={patientAccount?.id}
-            patient={{ id: patientAccount!.id, name: patientAccount!.name }}
+            patient={{ id: patientAccount!.id, name: patientAccount!.name, publicId: patientAccount!.publicId }}
           />
         ) : (
           <DoctorPortalLayout
