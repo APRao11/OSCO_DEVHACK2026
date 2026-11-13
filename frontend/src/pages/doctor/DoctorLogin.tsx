@@ -2,6 +2,7 @@ import React, { useId, useState } from 'react';
 import { LoaderCircle, LogOut, ShieldAlert } from 'lucide-react';
 import { loginDoctor } from '../../api/doctorApi.js';
 import { saveDoctorSession, type DoctorProfile } from '../../auth/doctorSession';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 
 /** Doctor sign-in (MVP document 6.2.1). */
 export const DoctorLogin: React.FC<{ onLoggedIn: (profile: DoctorProfile) => void; notice?: string }> = ({ onLoggedIn, notice }) => {
@@ -46,7 +47,7 @@ export const DoctorLogin: React.FC<{ onLoggedIn: (profile: DoctorProfile) => voi
           </div>
           <div>
             <label htmlFor={`${id}-password`} className="mb-2 block text-sm font-semibold">Password</label>
-            <input id={`${id}-password`} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
+            <PasswordInput id={`${id}-password`} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
           </div>
           {error && (
             <p role="alert" className="rounded-xl bg-brick-soft px-3 py-2 text-sm text-brick">

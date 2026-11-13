@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, HeartPulse } from 'lucide-react';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 
 export interface PatientAuthProps {
   onRegister: (name: string, email: string, password: string) => Promise<void>;
@@ -94,27 +95,27 @@ export const PatientAuth: React.FC<PatientAuthProps> = ({
               </label>
               <label className="block text-sm font-medium text-text-main">
                 Password
-                <input
+                <PasswordInput
                   required
-                  type="password"
                   autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   minLength={mode === 'signup' ? 8 : undefined}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-border-subtle px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest"
+                  wrapperClassName="mt-1.5"
+                  className="w-full rounded-lg border border-border-subtle px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest"
                   placeholder={mode === 'signup' ? 'At least 8 characters' : 'Your password'}
                 />
               </label>
               {mode === 'signup' && (
                 <label className="block text-sm font-medium text-text-main">
                   Confirm password
-                  <input
+                  <PasswordInput
                     required
-                    type="password"
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-border-subtle px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest"
+                    wrapperClassName="mt-1.5"
+                    className="w-full rounded-lg border border-border-subtle px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest/20 focus:border-forest"
                     placeholder="Enter your password again"
                   />
                 </label>
