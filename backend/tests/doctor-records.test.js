@@ -134,6 +134,14 @@ describe('doctor access to patient records', { skip: !TEST_DB && 'set TEST_DATAB
 		assert.equal(pending.doctor.name, doctor.name);
 
 		assert.equal((await call('POST', `/api/access/${pending.id}/approve`, patient.token, { access: 'read' })).status, 200);
+
+		// The doctor portal can pick up the approval after a reload: it is in the doctor's own list.
+		const mine = await call('GET', '/api/doctor/access-requests', doctor.token);
+		const listed = mine.body.data.requests.find((r) => r.id === pending.id);
+		assert.equal(listed.status, 'approved');
+		assert.equal(listed.session.active, true);
+		const other = await call('GET', '/api/doctor/access-requests', (await createDoctor('Dr Elsewhere')).token);
+		assert.ok(!other.body.data.requests.some((r) => r.id === pending.id)); // own requests only
 		const status = await call('GET', `/api/doctor/access-requests/${pending.id}`, doctor.token);
 		assert.equal(status.body.data.request.status, 'approved');
 		assert.equal(status.body.data.request.session.accessLevel, 'read');

@@ -5,6 +5,9 @@ import { requirePatientAccess } from '../middleware/patientScope.js';
 import { doctorOnly } from '../middleware/requireVerifiedDoctor.js';
 import { recordAudit, recordAuditSafely, requestIp } from '../services/audit.service.js';
 import { buildPatientRecords } from '../services/records.service.js';
+import { ClinicalRecordError, createClinicalRecord } from '../services/clinicalRecords.service.js';
+import { verifyFinding } from '../services/findings.service.js';
+import { enqueueReconcile } from '../services/queue.service.js';
 import { findingReviewHandlers } from './findingReview.js';
 
 /**
@@ -113,6 +116,23 @@ router.post('/access-requests', async (req, res, next) => {
 	}
 });
 
+/**
+ * This doctor's recent requests (last 24 hours), newest first: pending ones to keep
+ * waiting on and approved ones with an active session to open. Lets the doctor
+ * portal pick up where it left off after a reload or a portal switch.
+ */
+router.get('/access-requests', async (req, res, next) => {
+	try {
+		const { rows } = await pool.query(
+			`${REQUEST_SELECT} WHERE r.doctor_id = $1 AND r.requested_at > now() - interval '24 hours' ORDER BY r.requested_at DESC LIMIT 20`,
+			[req.doctor.id],
+		);
+		return res.status(200).json({ data: { requests: rows.map(requestView) } });
+	} catch (error) {
+		return next(error);
+	}
+});
+
 /** The doctor polls this while waiting for the patient's decision (5.6). Own requests only. */
 router.get('/access-requests/:id', async (req, res, next) => {
 	if (!isUuid(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'Access request not found.');
@@ -162,5 +182,84 @@ router.patch('/patients/:publicId/documents/:id/findings/:findingId', scope.edit
 router.post('/patients/:publicId/documents/:id/findings/:findingId/dismiss', scope.edit, review.dismiss);
 /** Undo a removal. */
 router.post('/patients/:publicId/documents/:id/findings/:findingId/restore', scope.edit, review.restore);
+
+/**
+ * Run a change for this patient as this doctor in one transaction, with its audit
+ * entry written in the same transaction (who changed what, and when).
+ */
+const asDoctor = (action, run) => async (req, res, next) => {
+	const { patientId } = req.patientAccess;
+	const client = await pool.connect();
+	try {
+		await client.query('BEGIN');
+		const result = await run(client, req);
+		if (!result) {
+			await client.query('ROLLBACK');
+			return fail(res, 404, 'NOT_FOUND', 'Not found.');
+		}
+		await recordAudit(
+			{
+				actorType: 'doctor', actorId: req.doctor.id, patientId, action, resourceType: result.resourceType,
+				resourceId: result.resourceId, outcome: 'allowed', details: result.audit ?? {}, ipAddress: requestIp(req),
+			},
+			client,
+		);
+		await client.query('COMMIT');
+		if (result.reconcile) await enqueueReconcile(patientId, action);
+		return res.status(result.status ?? 200).json({ data: result.data });
+	} catch (error) {
+		await client.query('ROLLBACK').catch(() => {});
+		if (error instanceof ClinicalRecordError) return fail(res, 400, 'INVALID_INPUT', error.message);
+		return next(error);
+	} finally {
+		client.release();
+	}
+};
+
+/** Confirm a finding is correct as recorded: marked Doctor-verified, nothing else changes (6.2.7). */
+router.post(
+	'/patients/:publicId/findings/:findingId/verify',
+	scope.edit,
+	asDoctor('finding.verify', async (client, req) => {
+		if (!isUuid(req.params.findingId)) return null;
+		const finding = await verifyFinding(client, { patientId: req.patientAccess.patientId, findingId: req.params.findingId, actor: { type: 'doctor', id: req.doctor.id } });
+		return finding && { resourceType: 'finding', resourceId: finding.id, data: { finding } };
+	}),
+);
+
+/** Mark a review flag resolved with a note (8.6: never resolved automatically). */
+router.post(
+	'/patients/:publicId/flags/:flagId/resolve',
+	scope.edit,
+	asDoctor('flag.resolve', async (client, req) => {
+		if (!isUuid(req.params.flagId)) return null;
+		const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+		if (!note || note.length > 1000) throw new ClinicalRecordError('Add a short note (up to 1000 characters) saying how this was reviewed.');
+		const { rows } = await client.query(
+			`UPDATE record_flags SET status = 'resolved', resolution_note = $3, resolved_by_doctor_id = $4, resolved_at = now()
+			 WHERE id = $1 AND patient_id = $2 AND status = 'open'
+			 RETURNING id, type`,
+			[req.params.flagId, req.patientAccess.patientId, note, req.doctor.id],
+		);
+		return rows.length && { resourceType: 'flag', resourceId: rows[0].id, audit: { type: rows[0].type, note }, data: { flag: { id: rows[0].id, status: 'resolved' } } };
+	}),
+);
+
+/** Add a clinical record: diagnoses, prescriptions, investigations, observations (6.2.8). */
+router.post(
+	'/patients/:publicId/clinical-records',
+	scope.edit,
+	asDoctor('clinical_record.create', async (client, req) => {
+		const record = await createClinicalRecord(client, { patientId: req.patientAccess.patientId, doctorId: req.doctor.id, body: req.body });
+		return {
+			status: 201,
+			resourceType: 'clinical_record',
+			resourceId: record.id,
+			audit: { items: record.findings.length, consultationDate: record.consultationDate },
+			reconcile: record.findings.length > 0,
+			data: { record },
+		};
+	}),
+);
 
 export default router;

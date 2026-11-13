@@ -27,14 +27,16 @@ export const FINDING_COLUMNS = `
 	c.action, c.dose, c.frequency, c.value, c.unit, c.ref_range, c.date_text,
 	to_char(c.event_date, 'YYYY-MM-DD') AS event_date, c.date_precision, c.normalised,
 	c.quote, c.page, c.quote_start, c.quote_end, c.match_type, c.source_type, c.verification_status,
-	c.review_status, c.supersedes_id, c.created_at, c.reviewed_at, c.previous_review_status,
+	c.review_status, c.supersedes_id, c.created_at, c.reviewed_at, c.previous_review_status, c.clinical_record_id,
 	c.author_type, c.reviewed_by_type,
 	(SELECT d.full_name FROM doctors d WHERE c.author_type = 'doctor' AND d.id = c.author_id) AS author_doctor_name,
 	(SELECT d.full_name FROM doctors d WHERE c.reviewed_by_type = 'doctor' AND d.id = c.reviewed_by_id) AS reviewer_doctor_name`;
 
 export const toFinding = (row) => ({
 	id: row.id,
-	documentId: row.document_id,
+	// Doctor-entered findings belong to a clinical record, which the records API lists like a document.
+	documentId: row.document_id ?? row.clinical_record_id,
+	clinicalRecordId: row.clinical_record_id ?? null,
 	category: row.category,
 	name: row.name,
 	nameNormalised: row.name_normalised,
@@ -220,6 +222,20 @@ export const setDismissed = async (client, ctx) => {
 	const finding = await loadFinding(client, current.id);
 	// The history changes when a confirmed finding is removed, or one is restored to confirmed.
 	return { finding, wasConfirmed: current.review_status === 'confirmed' || finding.reviewStatus === 'confirmed' };
+};
+
+/**
+ * A doctor confirms a finding is correct as recorded (6.2.7). Nothing about the
+ * finding changes except its verification status and who verified it.
+ */
+export const verifyFinding = async (client, { patientId, findingId, actor }) => {
+	const { rows } = await client.query(
+		`UPDATE claims c SET verification_status = 'doctor_verified', reviewed_at = now(), reviewed_by_type = 'doctor', reviewed_by_id = $3
+		 WHERE c.id = $1 AND c.patient_id = $2 AND c.review_status = 'confirmed' AND ${CURRENT_VERSION}
+		 RETURNING c.id`,
+		[findingId, patientId, actor.id],
+	);
+	return rows.length ? loadFinding(client, rows[0].id) : null;
 };
 
 /** Add all pending findings of a document to the medical history. */
