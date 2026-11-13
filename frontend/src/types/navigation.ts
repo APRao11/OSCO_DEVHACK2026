@@ -27,6 +27,7 @@ export const PATIENT_NAV_ITEMS: NavItem[] = [
   { id: 'medical-history', label: 'Medical History', iconName: 'Activity' },
   { id: 'documents', label: 'Documents', iconName: 'FileText' },
   { id: 'upload', label: 'Upload Documents', iconName: 'UploadCloud' },
+  { id: 'health-assistant', label: 'Health Assistant', iconName: 'Sparkles' },
   { id: 'health-details', label: 'Health Details', iconName: 'User' },
 ];
 

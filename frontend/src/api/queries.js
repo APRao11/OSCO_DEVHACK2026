@@ -92,3 +92,11 @@ export const denyAccessRequest = (token, requestId) =>
 /** End an active access early. @param {string} token @param {string} sessionId */
 export const endAccessSession = (token, sessionId) =>
 	apiRequest(`/api/access/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST', headers: authHeader(token) });
+
+/**
+ * Ask the records assistant about the logged-in patient's own records (POST /api/me/chat).
+ * The patient is identified by the token only.
+ * @param {string} token @param {string} question @param {AbortSignal} [signal]
+ */
+export const askHealthAssistant = (token, question, signal) =>
+	apiRequest('/api/me/chat', { method: 'POST', body: JSON.stringify({ question }), headers: authHeader(token), signal });

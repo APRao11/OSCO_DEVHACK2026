@@ -1,5 +1,22 @@
 import { apiRequest } from './client.js';
-import { getDoctorToken } from '../auth/doctorSession';
+import { clearDoctorSession, getDoctorToken } from '../auth/doctorSession';
+
+/** Fired when the server rejects the saved doctor login, so the portal can show sign-in again. */
+export const DOCTOR_SIGNED_OUT_EVENT = 'osco:doctor-signed-out';
+
+/**
+ * apiRequest for doctor routes. A 401 means the saved login is no longer valid
+ * (expired after 1 hour, or the account no longer exists): sign the doctor out
+ * instead of leaving the portal showing errors.
+ */
+const doctorRequest = (path, options) =>
+	apiRequest(path, options).catch((error) => {
+		if (error?.status === 401 && getDoctorToken()) {
+			clearDoctorSession();
+			window.dispatchEvent(new Event(DOCTOR_SIGNED_OUT_EVENT));
+		}
+		throw error;
+	});
 
 /**
  * Doctor API (MVP document 8.9). Every call sends the doctor's token; the
@@ -16,20 +33,20 @@ export const loginDoctor = (input) => apiRequest('/api/auth/doctor/login', { met
 
 /** Limited identification for a Patient ID (name only, no medical data). @param {string} patientId */
 export const lookupPatient = (patientId) =>
-	apiRequest('/api/doctor/lookup', { method: 'POST', body: JSON.stringify({ patientId }), headers: auth() });
+	doctorRequest('/api/doctor/lookup', { method: 'POST', body: JSON.stringify({ patientId }), headers: auth() });
 
 /** @param {{ patientId: string, purpose: string, access: 'read' | 'edit' }} input */
 export const createAccessRequest = (input) =>
-	apiRequest('/api/doctor/access-requests', { method: 'POST', body: JSON.stringify(input), headers: auth() });
+	doctorRequest('/api/doctor/access-requests', { method: 'POST', body: JSON.stringify(input), headers: auth() });
 
 /** @param {string} requestId */
 export const getAccessRequestStatus = (requestId) =>
-	apiRequest(`/api/doctor/access-requests/${encodeURIComponent(requestId)}`, { headers: auth() });
+	doctorRequest(`/api/doctor/access-requests/${encodeURIComponent(requestId)}`, { headers: auth() });
 
 const patientPath = (publicId) => `/api/doctor/patients/${encodeURIComponent(publicId)}`;
 
 /** The patient's medical history (confirmed findings), plus this doctor's current access. @param {string} publicId */
-export const getPatientRecords = (publicId) => apiRequest(`${patientPath(publicId)}/records`, { headers: auth() });
+export const getPatientRecords = (publicId) => doctorRequest(`${patientPath(publicId)}/records`, { headers: auth() });
 
 /**
  * The same review operations the patient dashboard uses, scoped to one patient
@@ -40,11 +57,11 @@ export const doctorReviewApi = (publicId) => {
 	const finding = (documentId, findingId) =>
 		`${patientPath(publicId)}/documents/${encodeURIComponent(documentId)}/findings/${encodeURIComponent(findingId)}`;
 	return {
-		load: (documentId) => apiRequest(`${patientPath(publicId)}/documents/${encodeURIComponent(documentId)}`, { headers: auth() }),
+		load: (documentId) => doctorRequest(`${patientPath(publicId)}/documents/${encodeURIComponent(documentId)}`, { headers: auth() }),
 		edit: (documentId, findingId, changes) =>
-			apiRequest(finding(documentId, findingId), { method: 'PATCH', body: JSON.stringify(changes), headers: auth() }),
-		dismiss: (documentId, findingId) => apiRequest(`${finding(documentId, findingId)}/dismiss`, { method: 'POST', headers: auth() }),
-		restore: (documentId, findingId) => apiRequest(`${finding(documentId, findingId)}/restore`, { method: 'POST', headers: auth() }),
+			doctorRequest(finding(documentId, findingId), { method: 'PATCH', body: JSON.stringify(changes), headers: auth() }),
+		dismiss: (documentId, findingId) => doctorRequest(`${finding(documentId, findingId)}/dismiss`, { method: 'POST', headers: auth() }),
+		restore: (documentId, findingId) => doctorRequest(`${finding(documentId, findingId)}/restore`, { method: 'POST', headers: auth() }),
 		confirm: null, // adding findings to the history is the patient's decision
 	};
 };
@@ -54,15 +71,26 @@ export const doctorAuthHeader = auth;
 
 /** Mark a finding Doctor-verified (no other change). */
 export const verifyFinding = (publicId, findingId) =>
-	apiRequest(`${patientPath(publicId)}/findings/${encodeURIComponent(findingId)}/verify`, { method: 'POST', headers: auth() });
+	doctorRequest(`${patientPath(publicId)}/findings/${encodeURIComponent(findingId)}/verify`, { method: 'POST', headers: auth() });
 
 /** Mark a review flag resolved, with a note saying how it was reviewed. */
 export const resolveFlag = (publicId, flagId, note) =>
-	apiRequest(`${patientPath(publicId)}/flags/${encodeURIComponent(flagId)}/resolve`, { method: 'POST', body: JSON.stringify({ note }), headers: auth() });
+	doctorRequest(`${patientPath(publicId)}/flags/${encodeURIComponent(flagId)}/resolve`, { method: 'POST', body: JSON.stringify({ note }), headers: auth() });
 
 /** Add a clinical record: { consultationDate, facility, diagnoses, prescriptions, investigations, observations }. */
 export const addClinicalRecord = (publicId, record) =>
-	apiRequest(`${patientPath(publicId)}/clinical-records`, { method: 'POST', body: JSON.stringify(record), headers: auth() });
+	doctorRequest(`${patientPath(publicId)}/clinical-records`, { method: 'POST', body: JSON.stringify(record), headers: auth() });
 
 /** This doctor's requests from the last 24 hours (pending and approved), newest first. */
-export const listAccessRequests = () => apiRequest('/api/doctor/access-requests', { headers: auth() });
+export const listAccessRequests = () => doctorRequest('/api/doctor/access-requests', { headers: auth() });
+
+/** The signed-in doctor as the server sees them now (verification is re-checked on every request). */
+export const getDoctorMe = () => doctorRequest('/api/doctor/me', { headers: auth() });
+
+/**
+ * Ask the records assistant about the patient this doctor has active consent for.
+ * The server checks the doctor's verification and the consent on every question.
+ * @param {string} publicId @param {string} question @param {AbortSignal} [signal]
+ */
+export const askDoctorAssistant = (publicId, question, signal) =>
+	doctorRequest(`${patientPath(publicId)}/chat`, { method: 'POST', body: JSON.stringify({ question }), headers: auth(), signal });

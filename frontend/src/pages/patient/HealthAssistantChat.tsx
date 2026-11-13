@@ -1,16 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send,
   Sparkles,
   Bot,
-  FileText,
   Info,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
-import type { ChatMessage, SourceReference } from '../../types/patient';
-import { INITIAL_CHAT_MESSAGES } from '../../mock/patientMockData';
+import { ChatAnswerDetails } from '../../components/records/ChatAnswerDetails';
+import { LazySourceViewer } from '../../components/records/LazySourceViewer';
+import { askHealthAssistant } from '../../api/queries.js';
+import { getAuthToken } from '../../auth/patientStorage';
+import { MAX_QUESTION_LENGTH, useRecordsChat } from '../../records/useRecordsChat';
+import type { ChatMessage } from '../../types/patient';
+import type { SourceTarget } from '../../types/records';
 
 export interface HealthAssistantChatProps {
   onOpenDocumentByName?: (docName: string) => void;
@@ -20,16 +24,32 @@ const EXAMPLE_QUESTIONS = [
   'What medications were prescribed to me?',
   'When was my last blood test?',
   'What were my previous diagnoses?',
-  'When was this medication discontinued?',
+  'What allergies are recorded?',
+];
+
+const WELCOME: ChatMessage[] = [
+  {
+    id: 'welcome',
+    sender: 'assistant',
+    text: 'Hi! Ask me about your medicines, test results, diagnoses or visits. I answer only from findings you have reviewed and added to your medical history, and I show the page each answer came from.',
+    timestamp: '',
+  },
 ];
 
 export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
   const [inputPrompt, setInputPrompt] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const msgCounterRef = useRef(100);
+  // The patient is identified by the login token only, never by an id sent from here.
+  const ask = useCallback((question: string, signal: AbortSignal) => {
+    const token = getAuthToken();
+    if (!token) return Promise.reject(Object.assign(new Error('Not signed in'), { status: 401 }));
+    return askHealthAssistant(token, question, signal);
+  }, []);
+  const { messages, isTyping, send } = useRecordsChat(ask, WELCOME, {
+    sessionExpiredText: 'Your session has expired. Please sign out and sign in again to use the assistant.',
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,99 +61,9 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
 
   const handleSend = (textToSend?: string) => {
     const prompt = (textToSend || inputPrompt).trim();
-    if (!prompt) return;
-
-    msgCounterRef.current += 1;
-    const userMsgId = `msg-${msgCounterRef.current}`;
-
-    const userMsg: ChatMessage = {
-      id: userMsgId,
-      sender: 'user',
-      text: prompt,
-      timestamp: 'Just now',
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+    if (!prompt || isTyping) return;
     setInputPrompt('');
-    setIsTyping(true);
-
-    // Realistic deterministic responses based on medical records
-    setTimeout(() => {
-      let botResponse: string;
-      let botSources: SourceReference[];
-
-      const lower = prompt.toLowerCase();
-      if (lower.includes('blood test') || lower.includes('hba1c') || lower.includes('lab')) {
-        botResponse =
-          'Your most recent laboratory investigation was on **October 24, 2026** at LabCorp Diagnostic Services.\n\n**Extracted Results:**\n- **Glycated Hemoglobin (HbA1c):** 6.8% (Target: <7.0%)\n- **Fasting Blood Glucose:** 124 mg/dL\n- **Estimated GFR:** 88 mL/min/1.73m² (Normal renal function)\n- **Serum Creatinine:** 0.92 mg/dL\n\nYour HbA1c shows consistent improvement from your previous reading of 7.4% documented in early 2026.';
-        botSources = [
-          {
-            docName: 'Comprehensive_Metabolic_Panel_LabCorp.pdf',
-            page: 2,
-            date: '2026-10-24',
-            excerpt:
-              'HbA1c: 6.8%, Fasting Plasma Glucose: 124 mg/dL. eGFR calculated at 88 mL/min.',
-          },
-        ];
-      } else if (
-        lower.includes('diagnos') ||
-        lower.includes('condition') ||
-        lower.includes('previous')
-      ) {
-        botResponse =
-          'According to your verified clinical records, the following formal diagnoses are documented in your history:\n\n1. **Type 2 Diabetes Mellitus (ICD-10 E11.9)** — Diagnosed on June 15, 2025 by Dr. Marcus Webb at Bay Health Primary Care following repeat fasting glucose evaluations.\n2. **Mild Diabetic Polyneuropathy** — Documented by specialist Dr. S. Kapoor on May 11, 2026, noting mild distal vibratory sensation changes.\n3. **Transient Post-Prandial Hyperglycemia** — Documented during an observational stay on October 24, 2026 at St. Jude Medical Center.';
-        botSources = [
-          {
-            docName: 'Endocrinology_FollowUp_ProgressNote.pdf',
-            page: 1,
-            date: '2025-06-15',
-            excerpt:
-              'Diagnosis confirmed: Type 2 Diabetes Mellitus without acute complications (E11.9).',
-          },
-          {
-            docName: 'Discharge_Summary_StJude_2026.pdf',
-            page: 1,
-            date: '2026-10-24',
-            excerpt: 'Discharge diagnosis: Transient hyperglycemia secondary to dietary indiscretion.',
-          },
-        ];
-      } else if (lower.includes('discontinued') || lower.includes('stopped') || lower.includes('glipizide')) {
-        botResponse =
-          '**Glipizide ER (5 mg daily)** was discontinued on **August 14, 2026** by Dr. Alistair Chen at Bay Health Endocrine Institute.\n\n**Reason for Discontinuation:**\nPatient clinical logs demonstrated 3 episodes of nocturnal mild hypoglycemia (54–62 mg/dL). Dr. Chen transitioned your therapy to Empagliflozin 10mg daily instead.\n\n*Reminder: Because this prescription is historical, you should no longer be taking Glipizide.*';
-        botSources = [
-          {
-            docName: 'Endocrinology_FollowUp_ProgressNote.pdf',
-            page: 4,
-            date: '2026-08-14',
-            excerpt:
-              'Cease Glipizide ER 5mg oral daily immediately. Recurrent nocturnal hypoglycemia confirmed on patient glucometer readings.',
-          },
-        ];
-      } else {
-        botResponse =
-          'Based on your verified medical records, your active medical management includes:\n\n- **Active Medications:** Metformin ER 1000mg BID and Empagliflozin 10mg once daily.\n- **Discontinued Medications:** Glipizide ER (stopped August 14, 2026).\n- **Recent Diagnostic:** CMP and HbA1c (6.8%) on October 24, 2026.\n\nEvery answer is cross-checked against your uploaded clinical documents with zero diagnostic inferences.';
-        botSources = [
-          {
-            docName: 'Pharmacy_Rx_Ledger_Q1_2026.pdf',
-            page: 1,
-            date: '2026-03-10',
-            excerpt: 'Active maintenance: Metformin ER 1000mg BID.',
-          },
-        ];
-      }
-
-      msgCounterRef.current += 1;
-      const botMsg: ChatMessage = {
-        id: `msg-${msgCounterRef.current}`,
-        sender: 'assistant',
-        text: botResponse,
-        timestamp: 'Just now',
-        sources: botSources,
-      };
-
-      setMessages((prev) => [...prev, botMsg]);
-      setIsTyping(false);
-    }, 700);
+    void send(prompt);
   };
 
   return (
@@ -160,7 +90,7 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
           </div>
 
           <div className="text-xs font-mono text-text-secondary bg-white px-3 py-1.5 rounded-md border border-border-subtle shrink-0">
-            Model: OSCO-Med-Audit
+            Answers cite your documents
           </div>
         </div>
       </section>
@@ -191,6 +121,7 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
             <button
               key={idx}
               onClick={() => handleSend(q)}
+              disabled={isTyping}
               className="text-left p-2.5 bg-white border border-border-subtle hover:border-forest/50 hover:bg-[#FAFCFB] rounded-md text-xs text-text-main font-medium transition-all shadow-xs cursor-pointer truncate"
             >
               "{q}"
@@ -203,10 +134,10 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
       <Card accent="forest">
         <CardHeader
           title="Medical Record Conversation"
-          subtitle="Cryptographically verified responses with inline provenance footnotes"
+          subtitle="Every answer links to the document page it came from"
           action={
             <Badge variant="verified" size="sm" isMono>
-              ZERO HALLUCINATION PROTOCOL
+              CITATIONS CHECKED ON SERVER
             </Badge>
           }
         />
@@ -252,46 +183,26 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
                     ))}
                   </div>
 
-                  {/* Supporting Source References */}
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border-subtle space-y-2">
-                      <div className="text-[10px] font-mono text-text-muted uppercase tracking-wider flex items-center gap-1">
-                        <FileText size={11} className="text-forest" />
-                        Provenance Grounding Citations:
-                      </div>
-                      <div className="space-y-1.5">
-                        {msg.sources.map((src, sIdx) => (
-                          <div
-                            key={sIdx}
-                            className="p-2 bg-osco-bg rounded border border-border-subtle text-xs space-y-0.5"
-                          >
-                            <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-forest font-semibold">
-                              <span>
-                                {src.docName} (Page {src.page})
-                              </span>
-                              <span className="text-text-muted">{src.date}</span>
-                            </div>
-                            <p className="text-[11px] text-text-secondary italic">
-                              "{src.excerpt}"
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <ChatAnswerDetails
+                    message={msg}
+                    title="Sources from your records"
+                    onOpenSource={setSourceTarget}
+                    onRetry={(q) => void send(q)}
+                    retryDisabled={isTyping}
+                  />
 
-                  <div
+                  {msg.timestamp && (<div
                     className={`mt-2 text-[10px] font-mono ${
                       isUser ? 'text-white/60 text-right' : 'text-text-muted'
                     }`}
                   >
                     {msg.timestamp}
-                  </div>
+                  </div>)}
                 </div>
 
                 {isUser && (
                   <div className="w-8 h-8 rounded bg-osco-bg text-forest border border-border-subtle flex items-center justify-center shrink-0 mt-0.5 font-mono text-xs font-bold">
-                    EV
+                    You
                   </div>
                 )}
               </div>
@@ -305,7 +216,7 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
               </div>
               <div className="bg-white border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-muted flex items-center gap-2">
                 <Sparkles size={13} className="text-forest animate-spin" />
-                <span>Searching verified clinical ledger...</span>
+                <span>Searching your medical records...</span>
               </div>
             </div>
           )}
@@ -326,6 +237,9 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
               type="text"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
+              maxLength={MAX_QUESTION_LENGTH}
+              disabled={isTyping}
+              aria-label="Your question"
               placeholder="Ask a question about your verified medications, tests, or visits..."
               className="flex-1 bg-osco-bg text-text-main text-xs sm:text-sm border border-border-subtle rounded-md px-3.5 py-2.5 focus:border-forest focus:ring-1 focus:ring-forest focus:outline-none transition-colors"
             />
@@ -334,13 +248,15 @@ export const HealthAssistantChat: React.FC<HealthAssistantChatProps> = () => {
               variant="citron"
               size="md"
               leftIcon={<Send size={14} />}
-              disabled={!inputPrompt.trim()}
+              disabled={!inputPrompt.trim() || isTyping}
             >
               Ask
             </Button>
           </form>
         </div>
       </Card>
+
+      <LazySourceViewer target={sourceTarget} onClose={() => setSourceTarget(null)} />
     </div>
   );
 };

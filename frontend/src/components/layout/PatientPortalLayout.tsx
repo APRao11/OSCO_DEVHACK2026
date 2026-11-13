@@ -12,6 +12,7 @@ import { PersonalHealthDetails } from '../../pages/patient/PersonalHealthDetails
 import { UploadDocuments } from '../../pages/patient/UploadDocuments';
 import { MedicalHistoryTimeline } from '../../pages/patient/MedicalHistoryTimeline';
 import { DocumentsLibrary } from '../../pages/patient/DocumentsLibrary';
+import { HealthAssistantChat } from '../../pages/patient/HealthAssistantChat';
 import { HealthAssistantWidget } from '../patient/HealthAssistantWidget';
 
 import { TimelineDetailDrawer } from '../patient/TimelineDetailDrawer';
@@ -174,6 +175,10 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
           />
         );
 
+      case 'health-assistant':
+      case 'assistant':
+        return <HealthAssistantChat />;
+
       case 'documents':
         return (
           <DocumentsLibrary
@@ -216,7 +221,8 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
 
       <LazySourceViewer target={sourceTarget} onClose={() => setSourceTarget(null)} />
 
-      <HealthAssistantWidget />
+      {/* The full assistant page replaces the small help widget. */}
+      {activeItemId !== 'health-assistant' && <HealthAssistantWidget />}
     </>
   );
 };

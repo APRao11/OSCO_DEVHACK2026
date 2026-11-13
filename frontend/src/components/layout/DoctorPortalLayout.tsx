@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { PatientContext } from '../../types/navigation';
 import type { UploadedDocument } from '../../types/patient';
 import FindPatient, { type ApprovedAccessRequest } from '../../pages/doctor/FindPatient';
@@ -7,7 +7,8 @@ import { DoctorDocuments } from '../../pages/doctor/DoctorDocuments';
 import { DoctorAssistantChat } from '../../pages/doctor/DoctorAssistantChat';
 import { DocumentViewerModal } from '../patient/DocumentViewerModal';
 import { DoctorLogin, DoctorStatusNotice } from '../../pages/doctor/DoctorLogin';
-import { clearDoctorSession, getDoctorProfile, getDoctorToken, type DoctorProfile } from '../../auth/doctorSession';
+import { clearDoctorSession, getDoctorProfile, getDoctorToken, saveDoctorSession, type DoctorProfile } from '../../auth/doctorSession';
+import { DOCTOR_SIGNED_OUT_EVENT, getDoctorMe } from '../../api/doctorApi.js';
 
 export interface DoctorPortalLayoutProps {
   currentPatient: PatientContext | null;
@@ -49,6 +50,41 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
 }) => {
   const [selectedDocument, setSelectedDocument] = useState<UploadedDocument | null>(null);
   const [doctor, setDoctor] = useState<DoctorProfile | null>(() => (getDoctorToken() ? getDoctorProfile() : null));
+  const [signInNotice, setSignInNotice] = useState('');
+  const signedIn = Boolean(doctor);
+
+  // The server rejected the saved login (expired, or the account no longer exists): show sign-in again.
+  useEffect(() => {
+    const onSignedOut = () => {
+      setDoctor(null);
+      setSignInNotice('Your session has ended. Please sign in again.');
+      onExitPatient();
+    };
+    window.addEventListener(DOCTOR_SIGNED_OUT_EVENT, onSignedOut);
+    return () => window.removeEventListener(DOCTOR_SIGNED_OUT_EVENT, onSignedOut);
+  }, [onExitPatient]);
+
+  // Check a saved login when the portal opens, and pick up a changed verification status.
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    let active = true;
+    getDoctorMe()
+      .then(() => undefined) // still valid and verified
+      .catch((error: { status?: number; body?: unknown; message?: string }) => {
+        if (!active || error.status !== 403) return; // 401 is handled by the sign-out event
+        const token = getDoctorToken();
+        const profile = getDoctorProfile();
+        const status = /revoked/i.test(error.message ?? '') ? 'revoked' : /rejected/i.test(error.message ?? '') ? 'rejected' : 'pending';
+        if (token && profile) {
+          const updated = { ...profile, verificationStatus: status, statusMessage: error.message ?? null } as DoctorProfile;
+          saveDoctorSession(token, updated);
+          setDoctor(updated);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [signedIn]);
 
   const signOut = () => {
     clearDoctorSession();
@@ -56,7 +92,17 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
     onExitPatient();
   };
 
-  if (!doctor) return <DoctorLogin onLoggedIn={setDoctor} />;
+  if (!doctor) {
+    return (
+      <DoctorLogin
+        notice={signInNotice}
+        onLoggedIn={(profile) => {
+          setSignInNotice('');
+          setDoctor(profile);
+        }}
+      />
+    );
+  }
   if (doctor.verificationStatus !== 'verified') return <DoctorStatusNotice profile={doctor} onLogout={signOut} />;
 
   if (!currentPatient) {
@@ -83,7 +129,7 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
     );
   }
   if (activeNavItemId === 'health-assistant') {
-    return <DoctorAssistantChat patientName={currentPatient.name} isDemoPatient={false} onOpenDocumentByName={() => {}} />;
+    return <DoctorAssistantChat key={currentPatient.id} patientName={currentPatient.name} patientPublicId={currentPatient.id} />;
   }
 
   return (

@@ -4,7 +4,7 @@ import { loginDoctor } from '../../api/doctorApi.js';
 import { saveDoctorSession, type DoctorProfile } from '../../auth/doctorSession';
 
 /** Doctor sign-in (MVP document 6.2.1). */
-export const DoctorLogin: React.FC<{ onLoggedIn: (profile: DoctorProfile) => void }> = ({ onLoggedIn }) => {
+export const DoctorLogin: React.FC<{ onLoggedIn: (profile: DoctorProfile) => void; notice?: string }> = ({ onLoggedIn, notice }) => {
   const id = useId();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,6 +34,11 @@ export const DoctorLogin: React.FC<{ onLoggedIn: (profile: DoctorProfile) => voi
         <p className="font-jetbrains text-[11px] uppercase tracking-[0.16em] text-ink-muted">Doctor portal</p>
         <h1 className="mt-2 font-fraunces text-[40px] font-medium leading-tight tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm leading-6 text-ink-muted">Only doctors verified by their hospital can look up patients, and only with each patient’s approval.</p>
+        {notice && (
+          <p role="status" className="mt-6 rounded-2xl bg-ochre-soft px-4 py-3 text-sm text-[#7A5A16]">
+            {notice}
+          </p>
+        )}
         <form onSubmit={submit} className="mt-8 space-y-4 rounded-3xl bg-chalk p-5 sm:p-6" noValidate>
           <div>
             <label htmlFor={`${id}-email`} className="mb-2 block text-sm font-semibold">Email</label>

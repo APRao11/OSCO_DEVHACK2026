@@ -37,3 +37,11 @@ export function verifyFinding(publicId: string, findingId: string): Promise<unkn
 export function resolveFlag(publicId: string, flagId: string, note: string): Promise<unknown>;
 export function addClinicalRecord(publicId: string, record: ClinicalRecordInput): Promise<{ data: { record: { id: string; findings: unknown[] } } }>;
 export function listAccessRequests(): Promise<{ data: { requests: DoctorAccessRequest[] } }>;
+export const DOCTOR_SIGNED_OUT_EVENT: string;
+export function getDoctorMe(): Promise<{ data: { doctor: { id: string; name: string; verificationStatus: string } } }>;
+
+export function askDoctorAssistant(
+  publicId: string,
+  question: string,
+  signal?: AbortSignal,
+): Promise<{ data: import('./queries.js').AssistantAnswer }>;

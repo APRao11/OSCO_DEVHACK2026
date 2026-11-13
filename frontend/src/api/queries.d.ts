@@ -146,3 +146,32 @@ export function listAccessRequests(token: string): Promise<{ data: { requests: P
 export function approveAccessRequest(token: string, requestId: string, access?: 'read' | 'edit'): Promise<unknown>;
 export function denyAccessRequest(token: string, requestId: string): Promise<unknown>;
 export function endAccessSession(token: string, sessionId: string): Promise<unknown>;
+
+export type AssistantStatus = 'documented' | 'documented_absent' | 'not_documented' | 'refused';
+
+export interface AssistantCitation {
+  id: string;
+  kind: 'finding' | 'page' | 'note';
+  documentId: string;
+  documentName: string;
+  documentType: string | null;
+  documentDate: string | null;
+  page: number | null;
+  /** Text copied from the source document (checked on the server) */
+  quote: string;
+  quoteMatchedModel: boolean;
+  findingId: string | null;
+  /** Opens the Source Viewer on the cited page; null for doctor-entered notes */
+  source: import('../types/records').SourceTarget | null;
+}
+
+export interface AssistantAnswer {
+  status: AssistantStatus;
+  answer: string;
+  citations: AssistantCitation[];
+  evidenceAvailable: boolean;
+  checked: { documents: number; findings: number } | null;
+  reason?: string;
+}
+
+export function askHealthAssistant(token: string, question: string, signal?: AbortSignal): Promise<{ data: AssistantAnswer }>;

@@ -70,6 +70,8 @@ export interface SourceReference {
   page: number;
   date: string;
   excerpt: string;
+  /** Opens the Source Viewer on the cited page (records assistant answers) */
+  target?: import('./records').SourceTarget | null;
 }
 
 export interface ChatMessage {
@@ -78,4 +80,8 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   sources?: SourceReference[];
+  /** Records assistant: how the answer relates to the records, or a failed request */
+  status?: 'documented' | 'documented_absent' | 'not_documented' | 'refused' | 'error';
+  /** For failed requests: the question to send again */
+  retryQuestion?: string;
 }
