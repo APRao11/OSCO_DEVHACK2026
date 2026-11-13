@@ -40,15 +40,22 @@ export const config = Object.freeze({
 	rateLimitMax: int(process.env.LLM_RATE_LIMIT_MAX, 10, 'LLM_RATE_LIMIT_MAX'),
 	rateLimitWindowMs: int(process.env.LLM_RATE_LIMIT_WINDOW_MS, 60_000, 'LLM_RATE_LIMIT_WINDOW_MS'),
 
-	extractorVersion: process.env.EXTRACTOR_VERSION?.trim() || 'v1',
+	extractorVersion: process.env.EXTRACTOR_VERSION?.trim() || 'v2',
 
 	llm: Object.freeze({
 		provider: llmProvider,
 		apiKey: llmProvider === 'gemini' ? process.env.GEMINI_API_KEY?.trim() : process.env.GROQ_API_KEY?.trim(),
+		// gemini-2.5-flash is no longer available to new API keys, so the default is a current model.
 		model:
 			process.env.LLM_MODEL?.trim() ||
-			(llmProvider === 'gemini' ? 'gemini-2.5-flash' : 'llama-3.3-70b-versatile'),
-		timeoutMs: int(process.env.LLM_TIMEOUT_MS, 120_000, 'LLM_TIMEOUT_MS'),
+			(llmProvider === 'gemini' ? 'gemini-3.6-flash' : 'llama-3.3-70b-versatile'),
+		// Tried in order when the main model is retired, overloaded, rate-limited or times out.
+		fallbackModels: (process.env.LLM_FALLBACK_MODELS ?? (llmProvider === 'gemini' ? 'gemini-3.5-flash,gemini-3.5-flash-lite' : ''))
+			.split(',')
+			.map((m) => m.trim())
+			.filter(Boolean),
+		// Per call, per model; a slow model falls through to the next one.
+		timeoutMs: int(process.env.LLM_TIMEOUT_MS, 90_000, 'LLM_TIMEOUT_MS'),
 		// Characters of page text sent per LLM call; longer documents are split on page boundaries.
 		maxCharsPerCall: int(process.env.LLM_MAX_CHARS_PER_CALL, 24_000, 'LLM_MAX_CHARS_PER_CALL'),
 	}),
@@ -56,9 +63,13 @@ export const config = Object.freeze({
 	ocr: Object.freeze({
 		tesseractPath: process.env.TESSERACT_PATH?.trim() || 'tesseract',
 		language: process.env.TESSERACT_LANG?.trim() || 'eng',
+		// Page segmentation mode. 6 keeps table rows on one line (see 2-ocr.js).
+		psm: int(process.env.TESSERACT_PSM, 6, 'TESSERACT_PSM'),
 		// A PDF page with fewer non-space characters than this in its text layer is treated as a scan.
 		minTextLayerChars: int(process.env.MIN_TEXT_LAYER_CHARS, 20, 'MIN_TEXT_LAYER_CHARS'),
 		renderScale: Number(process.env.OCR_RENDER_SCALE || 2),
+		// Small images and scanned pages are enlarged to about this width before OCR; small text is lost below it.
+		targetWidth: int(process.env.OCR_TARGET_WIDTH, 2400, 'OCR_TARGET_WIDTH'),
 	}),
 
 	verifier: Object.freeze({

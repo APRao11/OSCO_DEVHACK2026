@@ -47,11 +47,23 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ docume
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-text-secondary">Status</dt>
-            <dd className="text-right text-text-main">{document.status === 'Processing' ? 'Processing · demo' : 'Ready · demo'}</dd>
+            <dd className="text-right text-text-main">{document.status === 'Completed' ? 'Ready' : document.status}</dd>
           </div>
+          {document.relevantDate && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-text-secondary">Document date</dt>
+              <dd className="text-right text-text-main">{document.relevantDate}</dd>
+            </div>
+          )}
+          {document.facility && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-text-secondary">Findings</dt>
+              <dd className="text-right text-text-main">{document.facility}</dd>
+            </div>
+          )}
         </dl>
         <p className="mt-4 text-xs leading-5 text-text-secondary">
-          This frontend demo saves document details only. The selected file and its contents are not stored or processed.
+          The original file is stored securely and kept unchanged. Open Upload Documents to see the findings read from it.
         </p>
         <button type="button" onClick={onClose} className="mt-5 w-full rounded-lg bg-forest px-4 py-2.5 text-sm font-semibold text-white hover:bg-forest-dark">
           Close

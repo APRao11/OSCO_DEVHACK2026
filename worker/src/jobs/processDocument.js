@@ -17,8 +17,8 @@ import { ingest } from '../pipeline/1-ingest.js';
 import { ocr } from '../pipeline/2-ocr.js';
 import { classify } from '../pipeline/3-classify.js';
 import { extract } from '../pipeline/4-extract.js';
-import { verifyFindings } from '../pipeline/5-verify.js';
-import { normalise } from '../pipeline/6-normalise.js';
+import { verifyDocumentDate, verifyFindings } from '../pipeline/5-verify.js';
+import { normalise, parseDate } from '../pipeline/6-normalise.js';
 import { save } from '../pipeline/7-save.js';
 
 const resolveStoragePath = (storageKey) => {
@@ -95,6 +95,11 @@ export const processDocument = async (job) => {
 		const { accepted, rejected, stats } = verifyFindings(extraction.findings, pages, config.verifier);
 		await log(`verify: ${stats.accepted} accepted, ${stats.rejected} rejected ${JSON.stringify(stats.rejectedByReason)}, ${stats.pageCorrections} page correction(s)`);
 
+		// The document's own date, verified like a quote; undated if it cannot be verified.
+		const dateCheck = verifyDocumentDate(extraction.documentDate, pages);
+		const documentDate = dateCheck.ok ? { ...dateCheck, ...parseDate(dateCheck.date_text, { localeHint: config.dateLocaleHint }) } : null;
+		await log(`document date: ${documentDate ? `${documentDate.date_text} -> ${documentDate.event_date ?? 'ambiguous ' + JSON.stringify(documentDate.date_alternatives)}` : dateCheck.reason}`);
+
 		// 6. Normalise
 		const normalised = normalise(accepted, { localeHint: config.dateLocaleHint });
 
@@ -110,7 +115,8 @@ export const processDocument = async (job) => {
 				pages,
 				accepted: normalised,
 				rejected,
-				stats: { ...stats, model: extraction.model, fromCache: extraction.fromCache },
+				documentDate,
+				stats: { ...stats, documentDateVerified: Boolean(documentDate), model: extraction.model, fromCache: extraction.fromCache },
 			});
 		});
 		await job.updateProgress(90);

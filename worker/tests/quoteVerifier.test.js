@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { findQuote, normaliseText, normaliseWithMap, quoteContains } from '../src/utils/quoteMatch.js';
-import { verifyFindings } from '../src/pipeline/5-verify.js';
+import { verifyDocumentDate, verifyFindings } from '../src/pipeline/5-verify.js';
 
 describe('normaliseText', () => {
 	test('applies NFKC (ligatures, full-width, non-breaking space)', () => {
@@ -200,5 +200,54 @@ describe('verifyFindings (Quote Verifier, section 7.2)', () => {
 		const finding = { ...base, category: 'investigation', name: 'Hb', action: null, dose: null, frequency: null, value: '13.5', unit: 'g/dL', quote: 'Hb 13.5 g/dL', page: 1 };
 		const { accepted } = verifyFindings([finding], [ocrPage]);
 		assert.deepEqual(accepted[0].ocr_word_boxes.map((w) => w.text), ['Hb', '13.5', 'g/dL']);
+	});
+});
+
+describe('lab reports: header date vs row quotes', () => {
+	// OCR text of a real-style lab report: one collection date at the top, results below.
+	const labPage = {
+		pageNumber: 1,
+		text: 'Collected : 23/7/2024 6:39:00AM Reported : 23/7/2024\nTest Name Results Units Bio. Ref. Interval\nAPOLIPOPROTEIN B (Apo B) 46.00 mg/dL 46 - 174\nGLUCOSE, FASTING (F), PLASMA mg/dL 70 - 100',
+	};
+	const row = {
+		category: 'investigation', subject: 'patient', assertion: 'present', action: null,
+		name: 'APOLIPOPROTEIN B (Apo B)', value: '46.00', unit: 'mg/dL', ref_range: '46 - 174',
+		dose: null, frequency: null, subject_relation: null,
+		quote: 'APOLIPOPROTEIN B (Apo B) 46.00 mg/dL 46 - 174', page: 1,
+	};
+
+	test('a header date copied onto a row is dropped, and the result is kept', () => {
+		const { accepted, rejected, stats } = verifyFindings([{ ...row, date_text: '23/7/2024' }], [labPage]);
+		assert.equal(rejected.length, 0);
+		assert.equal(accepted.length, 1);
+		assert.equal(accepted[0].date_text, null);
+		assert.equal(accepted[0].value, '46.00');
+		assert.equal(stats.datesDropped, 1);
+	});
+
+	test('a wrong value is still rejected, even alongside a stray date', () => {
+		const { accepted, rejected } = verifyFindings([{ ...row, value: '64.00', date_text: '23/7/2024' }], [labPage]);
+		assert.equal(accepted.length, 0);
+		assert.equal(rejected[0].reason, 'field_not_in_quote');
+		assert.match(rejected[0].detail, /value/);
+	});
+
+	test('a row with no printed result is kept with no value', () => {
+		const glucose = { ...row, name: 'GLUCOSE, FASTING (F), PLASMA', value: null, ref_range: '70 - 100', quote: 'GLUCOSE, FASTING (F), PLASMA mg/dL 70 - 100' };
+		const { accepted } = verifyFindings([glucose], [labPage]);
+		assert.equal(accepted.length, 1);
+		assert.equal(accepted[0].value, null);
+	});
+
+	test('verifyDocumentDate accepts a date inside a quote found on the page', () => {
+		const result = verifyDocumentDate({ date_text: '23/7/2024', quote: 'Collected : 23/7/2024 6:39:00AM', page: 1 }, [labPage]);
+		assert.equal(result.ok, true);
+		assert.equal(labPage.text.slice(result.quote_start, result.quote_end), 'Collected : 23/7/2024 6:39:00AM');
+	});
+
+	test('verifyDocumentDate rejects an invented date or quote', () => {
+		assert.equal(verifyDocumentDate({ date_text: '24/7/2024', quote: 'Collected : 23/7/2024 6:39:00AM', page: 1 }, [labPage]).ok, false);
+		assert.equal(verifyDocumentDate({ date_text: '01/01/2024', quote: 'Collected : 01/01/2024', page: 1 }, [labPage]).ok, false);
+		assert.equal(verifyDocumentDate(null, [labPage]).ok, false);
 	});
 });

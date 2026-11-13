@@ -37,7 +37,7 @@ export const reconcilePatient = async (job) => {
 		await client.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [RECONCILE_LOCK_NAMESPACE, patientId]);
 
 		const { rows: claims } = await client.query(
-			`SELECT c.*, d.created_at AS document_created_at
+			`SELECT c.*, d.created_at AS document_created_at, d.document_date
 			 FROM claims c
 			 LEFT JOIN documents d ON d.id = c.document_id
 			 WHERE c.patient_id = $1 AND c.retired_at IS NULL AND c.verification_status <> 'rejected'
