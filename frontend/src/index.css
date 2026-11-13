@@ -57,7 +57,10 @@
 
 .doctor-interface h1,
 .doctor-interface h2,
-.doctor-interface h3 {
+.doctor-interface h3,
+.patient-interface h1,
+.patient-interface h2,
+.patient-interface h3 {
   font-family: 'Instrument Serif', Georgia, serif;
   letter-spacing: -0.01em;
 }

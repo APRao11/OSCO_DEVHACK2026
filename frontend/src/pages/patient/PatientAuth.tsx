@@ -36,7 +36,7 @@ export const PatientAuth: React.FC<PatientAuthProps> = ({
   };
 
   return (
-    <main className="min-h-screen bg-osco-bg flex items-center justify-center px-5 py-12">
+    <main className="patient-interface min-h-screen bg-osco-bg flex items-center justify-center px-5 py-12">
       <div className="w-full max-w-5xl min-h-[560px] grid lg:grid-cols-[1.05fr_0.95fr] bg-white rounded-2xl overflow-hidden shadow-sm border border-border-subtle">
         <section className="bg-forest text-white p-8 sm:p-12 flex flex-col justify-between">
           <div className="flex items-center gap-3">

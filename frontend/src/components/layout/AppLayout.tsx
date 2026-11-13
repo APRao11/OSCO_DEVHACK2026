@@ -50,7 +50,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <div
         className={`flex-1 flex flex-col min-h-screen transition-all duration-200 ease-in-out ${
           isSidebarCollapsed ? 'lg:pl-20' : portal === 'doctor' ? 'lg:pl-60' : 'lg:pl-72'
-        }`}
+        } ${portal === 'doctor' ? 'bg-[#F3F1EA]' : ''}`}
       >
         {/* Topbar */}
         <Topbar
@@ -62,7 +62,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Content Body with Generous & Controlled Whitespace */}
         <main
           className={`flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 ${
-            portal === 'doctor' ? 'doctor-interface bg-[#F3F1EA]' : ''
+            portal === 'doctor' ? 'doctor-interface' : 'patient-interface'
           }`}
         >
           {portal === 'doctor' && currentPatient?.id.startsWith('pt-') && (
