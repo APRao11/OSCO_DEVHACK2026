@@ -5,7 +5,7 @@ import type {
   TimelineEvent,
 } from '../../types/patient';
 import { getAuthToken, loadPatientData, savePatientData } from '../../auth/patientStorage';
-import { listDocuments, type ProcessedDocument } from '../../api/queries.js';
+import { getMyRecords, listDocuments, type ProcessedDocument } from '../../api/queries.js';
 
 import { PatientDashboard } from '../../pages/patient/PatientDashboard';
 import { PersonalHealthDetails } from '../../pages/patient/PersonalHealthDetails';
@@ -17,13 +17,9 @@ import { HealthAssistantWidget } from '../patient/HealthAssistantWidget';
 import { TimelineDetailDrawer } from '../patient/TimelineDetailDrawer';
 import { DocumentViewerModal } from '../patient/DocumentViewerModal';
 import { LazySourceViewer } from '../records/LazySourceViewer';
-import { DEMO_RECORDS } from '../../records/demoRecords';
+import { EMPTY_RECORDS } from '../../records/demoRecords';
 import { sourceTargetFor } from '../../records/source';
-import type { SourceTarget } from '../../types/records';
-
-// There is no records API yet, so the timeline shows the synthetic demo patient.
-const DEMO_NOTICE =
-  'Showing the synthetic demo patient. Your own uploads will appear here once the records API is connected.';
+import type { PatientRecords, SourceTarget } from '../../types/records';
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   prescription: 'Prescription',
@@ -75,6 +71,33 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
   useEffect(() => {
     savePatientData(patient.id, patientData);
   }, [patient.id, patientData]);
+
+  // The medical history: only findings the patient has confirmed (GET /api/me/records).
+  const [records, setRecords] = useState<PatientRecords>(EMPTY_RECORDS);
+  const [pendingReview, setPendingReview] = useState<{ documents: number; findings: number }>({ documents: 0, findings: 0 });
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
+  useEffect(() => {
+    if (activeItemId !== 'medical-history') return undefined;
+    const token = getAuthToken();
+    if (!token) return undefined;
+    let active = true;
+    getMyRecords(token)
+      .then(({ data }) => {
+        if (!active) return;
+        const { pendingReview: pending, ...history } = data;
+        setRecords(history);
+        setPendingReview(pending);
+      })
+      .catch(() => {
+        // Keep what is shown; the page stays usable.
+      })
+      .finally(() => {
+        if (active) setRecordsLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeItemId]);
 
   // Reload on every page change, so Dashboard and Documents show uploads made a moment ago.
   useEffect(() => {
@@ -143,9 +166,11 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
       case 'medical-history':
         return (
           <MedicalHistoryTimeline
-            records={DEMO_RECORDS}
-            onOpenSource={(findingId) => setSourceTarget(sourceTargetFor(DEMO_RECORDS, findingId))}
-            notice={DEMO_NOTICE}
+            records={records}
+            loading={!recordsLoaded}
+            pendingReview={pendingReview}
+            onOpenReview={() => onNavigate('upload')}
+            onOpenSource={(findingId) => setSourceTarget(sourceTargetFor(records, findingId))}
           />
         );
 

@@ -41,8 +41,11 @@ export const formatRecordDate = (iso: string | null | undefined): string => {
 };
 
 /** The source label every brief line carries (section 6.2.4). */
-export const provenanceLabel = (finding: Finding): 'Doctor-verified' | 'Doctor-entered' | 'AI-extracted' => {
-  if (finding.verificationStatus === 'doctor_verified' || finding.verificationStatus === 'corrected') return 'Doctor-verified';
+export type ProvenanceLabel = 'Doctor-verified' | 'Doctor-entered' | 'Edited by patient' | 'AI-extracted';
+
+export const provenanceLabel = (finding: Finding): ProvenanceLabel => {
+  if (finding.sourceType === 'patient_corrected') return 'Edited by patient';
+  if (finding.verificationStatus === 'doctor_verified') return 'Doctor-verified';
   if (finding.sourceType === 'doctor_entered') return 'Doctor-entered';
   return 'AI-extracted';
 };

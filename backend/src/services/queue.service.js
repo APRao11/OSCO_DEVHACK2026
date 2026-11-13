@@ -75,6 +75,34 @@ export const enqueueDocument = (document) =>
 		})(),
 	);
 
+// Must match worker/src/queues.js.
+export const RECONCILE_QUEUE = 'patient-reconcile';
+let reconcileQueue;
+
+/**
+ * Rebuild one patient's medication histories (step 8) after the patient
+ * confirms or edits findings. The worker serialises these per patient.
+ * Best effort: if Redis is down the history updates on the next reconcile.
+ */
+export const enqueueReconcile = async (patientId, reason) => {
+	try {
+		reconcileQueue ??= new Queue(RECONCILE_QUEUE, { connection: { ...redisConnection, enableOfflineQueue: false } });
+		reconcileQueue.on('error', () => {});
+		await withTimeout(
+			reconcileQueue.add(
+				'reconcile-patient',
+				{ patientId, triggeredBy: reason },
+				{ jobId: `reconcile_${patientId}_${Date.now()}`, attempts: 3, backoff: { type: 'exponential', delay: 5_000 }, removeOnComplete: { age: 3600 }, removeOnFail: { age: 24 * 3600 } },
+			),
+		);
+		return true;
+	} catch (error) {
+		console.error(`Could not queue reconciliation for ${patientId}: ${error.message}`);
+		return false;
+	}
+};
+
 export const closeQueues = async () => {
 	await documentQueue?.close();
+	await reconcileQueue?.close();
 };

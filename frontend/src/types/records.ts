@@ -42,10 +42,14 @@ export interface Finding {
   quoteStart: number;
   quoteEnd: number;
   matchType: 'exact' | 'approximate';
-  sourceType: 'ai_extracted' | 'doctor_entered';
+  /** patient_corrected: a patient's edit, which supersedes the finding it corrects */
+  sourceType: 'ai_extracted' | 'doctor_entered' | 'patient_corrected';
   verificationStatus: 'unverified' | 'doctor_verified' | 'corrected' | 'rejected';
   /** Set when a correction replaced this finding */
   supersededBy?: string | null;
+  /** The finding this one corrects (patient edits) */
+  supersedesId?: string | null;
+  reviewStatus?: 'pending' | 'confirmed' | 'dismissed';
 }
 
 export interface SourcePage {
@@ -56,6 +60,7 @@ export interface SourcePage {
 export interface SourceDocument {
   id: string;
   name: string;
+  /** Absolute URL, or an /api/... path served to the logged-in patient only */
   fileUrl: string | null;
   documentType: DocumentType;
   /** ISO date when the document's own date is unambiguous */

@@ -1,3 +1,5 @@
+export function apiUrl(path: string): string;
+
 export interface HealthResponse {
   status: string;
   timestamp?: string;
@@ -42,6 +44,7 @@ export interface ProcessedDocument {
   processedAt: string | null;
   error: string | null;
   findingsCount: number;
+  review: { pending: number; confirmed: number; dismissed: number };
   documentDate: string | null;
   documentDateText: string | null;
   documentDatePrecision: 'day' | 'month' | 'year' | null;
@@ -76,8 +79,10 @@ export interface ExtractedFinding {
   page: number;
   quoteStart: number;
   quoteEnd: number;
-  sourceType: 'ai_extracted' | 'doctor_entered';
+  sourceType: 'ai_extracted' | 'doctor_entered' | 'patient_corrected';
   verificationStatus: string;
+  reviewStatus: 'pending' | 'confirmed' | 'dismissed';
+  supersedesId: string | null;
 }
 
 export interface UploadResult {
@@ -93,3 +98,27 @@ export function uploadDocuments(token: string, files: File[]): Promise<{ data: {
 export function listDocuments(token: string): Promise<{ data: { documents: ProcessedDocument[] } }>;
 export function getDocumentFindings(token: string, documentId: string): Promise<{ data: { document: ProcessedDocument; findings: ExtractedFinding[] } }>;
 export function retryDocument(token: string, documentId: string): Promise<{ data: { document: ProcessedDocument } }>;
+
+export interface FindingEdit {
+  name?: string;
+  dose?: string | null;
+  frequency?: string | null;
+  value?: string | null;
+  unit?: string | null;
+  refRange?: string | null;
+  assertion?: 'present' | 'absent' | 'possible' | 'historical';
+  /** YYYY-MM-DD, or null to clear */
+  date?: string | null;
+}
+
+export interface ReviewResponse {
+  data: { document: ProcessedDocument; findings: ExtractedFinding[]; finding?: ExtractedFinding };
+}
+
+export function getMyRecords(token: string): Promise<{
+  data: import('../types/records').PatientRecords & { pendingReview: { documents: number; findings: number } };
+}>;
+export function editFinding(token: string, documentId: string, findingId: string, changes: FindingEdit): Promise<ReviewResponse>;
+export function dismissFinding(token: string, documentId: string, findingId: string): Promise<ReviewResponse>;
+export function restoreFinding(token: string, documentId: string, findingId: string): Promise<ReviewResponse>;
+export function confirmDocumentFindings(token: string, documentId: string): Promise<ReviewResponse>;

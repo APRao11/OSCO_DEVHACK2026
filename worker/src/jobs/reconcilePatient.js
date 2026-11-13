@@ -41,6 +41,9 @@ export const reconcilePatient = async (job) => {
 			 FROM claims c
 			 LEFT JOIN documents d ON d.id = c.document_id
 			 WHERE c.patient_id = $1 AND c.retired_at IS NULL AND c.verification_status <> 'rejected'
+			   -- Only what the patient confirmed, in its current (possibly patient-edited) version.
+			   AND c.review_status = 'confirmed'
+			   AND NOT EXISTS (SELECT 1 FROM claims newer WHERE newer.supersedes_id = c.id AND newer.retired_at IS NULL)
 			 ORDER BY c.event_date NULLS LAST, d.created_at, c.created_at, c.id`,
 			[patientId],
 		);

@@ -1,4 +1,7 @@
-import { apiRequest } from './client.js';
+import { API_BASE_URL, apiRequest } from './client.js';
+
+/** Absolute URL for an API path (for clients like pdf.js that fetch on their own). @param {string} path */
+export const apiUrl = (path) => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
 /** @typedef {{ status: string, timestamp?: string }} HealthResponse */
 /** @typedef {{ id: string, name: string, email: string, createdAt: string }} PatientProfile */
@@ -42,3 +45,28 @@ export const getDocumentFindings = (token, documentId) =>
 /** Queue a failed or never-queued document again. @param {string} token @param {string} documentId */
 export const retryDocument = (token, documentId) =>
 	apiRequest(`/api/documents/${encodeURIComponent(documentId)}/retry`, { method: 'POST', headers: authHeader(token) });
+
+/** The patient's medical history: confirmed findings only (GET /api/me/records). @param {string} token */
+export const getMyRecords = (token) => apiRequest('/api/me/records', { headers: authHeader(token) });
+
+const findingPath = (documentId, findingId) =>
+	`/api/documents/${encodeURIComponent(documentId)}/findings/${encodeURIComponent(findingId)}`;
+
+/**
+ * Correct a finding. Saved as a new version labelled as patient-edited; the original is kept.
+ * @param {string} token @param {string} documentId @param {string} findingId @param {object} changes
+ */
+export const editFinding = (token, documentId, findingId, changes) =>
+	apiRequest(findingPath(documentId, findingId), { method: 'PATCH', body: JSON.stringify(changes), headers: authHeader(token) });
+
+/** Remove a wrong finding (kept, never shown). */
+export const dismissFinding = (token, documentId, findingId) =>
+	apiRequest(`${findingPath(documentId, findingId)}/dismiss`, { method: 'POST', headers: authHeader(token) });
+
+/** Bring a removed finding back for review. */
+export const restoreFinding = (token, documentId, findingId) =>
+	apiRequest(`${findingPath(documentId, findingId)}/restore`, { method: 'POST', headers: authHeader(token) });
+
+/** Add a document's reviewed findings to the medical history. */
+export const confirmDocumentFindings = (token, documentId) =>
+	apiRequest(`/api/documents/${encodeURIComponent(documentId)}/confirm`, { method: 'POST', headers: authHeader(token) });

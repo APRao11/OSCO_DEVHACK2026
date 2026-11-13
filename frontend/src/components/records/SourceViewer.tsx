@@ -6,6 +6,8 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { layoutTextItems } from '../../utils/pdfTextLayout.js';
+import { apiUrl } from '../../api/queries.js';
+import { getAuthToken } from '../../auth/patientStorage';
 import { DOCUMENT_TYPE_LABELS, formatRecordDate } from '../../records/format';
 import type { SourceTarget } from '../../types/records';
 
@@ -64,6 +66,15 @@ const SourceViewerDialog: React.FC<{ target: SourceTarget; onClose: () => void }
   const [ranges, setRanges] = useState<Array<[number, number] | null> | null>(null);
   const [width, setWidth] = useState(560);
   const pageContainer = useRef<HTMLDivElement>(null);
+
+  // Originals under /api/ are only served to the logged-in patient, so pdf.js sends the token.
+  // Memoised: react-pdf reloads the document whenever this object changes.
+  const file = useMemo(() => {
+    if (!doc.fileUrl) return null;
+    if (!doc.fileUrl.startsWith('/api/')) return doc.fileUrl;
+    const token = getAuthToken();
+    return { url: apiUrl(doc.fileUrl), httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined };
+  }, [doc.fileUrl]);
 
   useEffect(() => {
     const element = pageContainer.current;
@@ -215,7 +226,7 @@ const SourceViewerDialog: React.FC<{ target: SourceTarget; onClose: () => void }
           <div ref={pageContainer} className="min-h-[50vh] flex-1 overflow-auto p-4">
             {mode === 'pdf' && doc.fileUrl ? (
               <Document
-                file={doc.fileUrl}
+                file={file}
                 options={PDF_OPTIONS}
                 onLoadSuccess={({ numPages: total }) => setNumPages(total)}
                 onLoadError={() => fallBack('The original PDF could not be loaded, so the stored page text is shown.')}

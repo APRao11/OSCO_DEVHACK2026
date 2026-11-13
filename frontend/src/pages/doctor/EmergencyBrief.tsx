@@ -47,6 +47,7 @@ const LABEL_STYLES: Record<string, string> = {
   'AI-extracted': 'text-eucalyptus-dark',
   'Doctor-verified': 'text-forest font-semibold',
   'Doctor-entered': 'text-forest',
+  'Edited by patient': 'text-warning',
   'Computed from records': 'text-text-muted',
 };
 

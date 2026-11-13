@@ -6,6 +6,7 @@ import {
   isShownFinding,
   pluralDocuments,
   provenanceLabel,
+  type ProvenanceLabel,
 } from './format';
 
 /**
@@ -26,7 +27,7 @@ export interface BriefLine {
   date: string;
   /** Finding to open in the Source Viewer; null for computed lines (e.g. empty categories) */
   sourceFindingId: string | null;
-  label: 'AI-extracted' | 'Doctor-verified' | 'Doctor-entered' | 'Computed from records' | null;
+  label: ProvenanceLabel | 'Computed from records' | null;
   tags: string[];
 }
 

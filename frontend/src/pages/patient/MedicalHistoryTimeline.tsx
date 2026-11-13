@@ -20,6 +20,12 @@ export interface MedicalHistoryTimelineProps {
   eyebrow?: string;
   /** Shown above the timeline when the records are the synthetic demo set */
   notice?: string;
+  /** Findings extracted but not yet confirmed by the patient (not shown in the history) */
+  pendingReview?: { documents: number; findings: number };
+  /** Open the review screen (Upload Documents) */
+  onOpenReview?: () => void;
+  /** Records are still loading */
+  loading?: boolean;
 }
 
 const CATEGORIES: (FindingCategory | 'all')[] = ['all', 'medication', 'condition', 'allergy', 'investigation', 'event'];
@@ -179,7 +185,15 @@ const MedicationCard: React.FC<{ history: MedicationHistory; records: PatientRec
  * grouped for review instead of being guessed into place. Every finding opens
  * its source with the verified quote highlighted.
  */
-export const MedicalHistoryTimeline: React.FC<MedicalHistoryTimelineProps> = ({ records, onOpenSource, eyebrow = 'Your health record', notice }) => {
+export const MedicalHistoryTimeline: React.FC<MedicalHistoryTimelineProps> = ({
+  records,
+  onOpenSource,
+  eyebrow = 'Your health record',
+  notice,
+  pendingReview,
+  onOpenReview,
+  loading = false,
+}) => {
   const [documentType, setDocumentType] = useState<DocumentType | 'all'>('all');
   const [category, setCategory] = useState<FindingCategory | 'all'>('all');
 
@@ -189,7 +203,7 @@ export const MedicalHistoryTimeline: React.FC<MedicalHistoryTimelineProps> = ({ 
     [records.documents],
   );
   const showMedicines = (category === 'all' || category === 'medication') && documentType === 'all' && records.medicationHistories.length > 0;
-  const hasDocuments = records.documents.some((d) => d.status === 'ready');
+  const hasDocuments = records.findings.length > 0;
   const nothingMatches = timeline.dated.length === 0 && timeline.undated.length === 0;
   const stats = records.extractionStats;
 
@@ -209,13 +223,31 @@ export const MedicalHistoryTimeline: React.FC<MedicalHistoryTimelineProps> = ({ 
           </p>
         )}
         {notice && <p className="mt-3 rounded-lg bg-citron-subtle px-3 py-2 text-xs text-forest">{notice}</p>}
+        {pendingReview && pendingReview.findings > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-citron-subtle px-3 py-2.5">
+            <p className="text-sm text-forest">
+              <span className="font-semibold">
+                {pendingReview.findings} finding{pendingReview.findings === 1 ? '' : 's'}
+              </span>{' '}
+              from {pendingReview.documents} document{pendingReview.documents === 1 ? '' : 's'} {pendingReview.findings === 1 ? 'is' : 'are'} waiting for your
+              review. They are added here once you confirm them.
+            </p>
+            {onOpenReview && (
+              <button type="button" onClick={onOpenReview} className="rounded-lg bg-forest px-3 py-1.5 text-xs font-semibold text-white hover:bg-forest-dark">
+                Review now
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
-      {!hasDocuments ? (
+      {loading ? (
+        <p className="border-y border-border-subtle py-10 text-center text-sm text-text-secondary">Loading your medical history…</p>
+      ) : !hasDocuments ? (
         <div className="border-y border-border-subtle py-10 text-center">
           <Activity size={20} className="mx-auto text-eucalyptus-dark" />
-          <p className="mt-3 text-sm font-medium text-text-main">No processed documents yet.</p>
-          <p className="mt-1 text-xs text-text-secondary">Your history appears here once uploaded documents have been read and verified.</p>
+          <p className="mt-3 text-sm font-medium text-text-main">Nothing in your medical history yet.</p>
+          <p className="mt-1 text-xs text-text-secondary">Upload documents, check the findings read from them, and confirm them to add them here.</p>
         </div>
       ) : (
         <>

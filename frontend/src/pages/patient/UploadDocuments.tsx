@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, ChevronDown, FileImage, FileText, LoaderCircle, RotateCw, UploadCloud } from 'lucide-react';
 import { getAuthToken } from '../../auth/patientStorage';
+import { FindingsReview } from '../../components/patient/FindingsReview';
 import {
-  getDocumentFindings,
   listDocuments,
   retryDocument,
   uploadDocuments,
-  type ExtractedFinding,
   type ProcessedDocument,
 } from '../../api/queries.js';
 
@@ -28,21 +27,6 @@ const STATUS_STYLES: Record<ProcessedDocument['status'], string> = {
   failed: 'bg-warning-subtle text-warning',
 };
 
-const QUALIFIERS: Record<ExtractedFinding['assertion'], string | null> = {
-  present: null,
-  absent: 'Documented as absent',
-  possible: 'Possible - unconfirmed',
-  historical: 'Past history',
-};
-
-const CATEGORY_LABELS: Record<ExtractedFinding['category'], string> = {
-  condition: 'Condition',
-  medication: 'Medicine',
-  allergy: 'Allergy',
-  investigation: 'Investigation',
-  event: 'Event',
-};
-
 const sizeLabel = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -57,13 +41,6 @@ const documentDateLabel = (document: ProcessedDocument) => {
   if (document.documentDateAlternatives?.length) return `Date unclear: "${document.documentDateText}"`;
   return 'No date found';
 };
-
-const findingDetail = (finding: ExtractedFinding) =>
-  finding.category === 'medication'
-    ? [finding.dose, finding.frequency].filter(Boolean).join(' ')
-    : [finding.value && [finding.value, finding.unit].filter(Boolean).join(' '), finding.refRange && `(lab's range ${finding.refRange})`]
-        .filter(Boolean)
-        .join(' ');
 
 /**
  * Upload and scan documents (MVP document section 6.1.4).
@@ -255,8 +232,13 @@ export const UploadDocuments: React.FC = () => {
         ) : documents.length ? (
           <ul className="divide-y divide-border-subtle border-y border-border-subtle">
             {documents.map((document) => (
-              // Keyed on status so a row starts fresh (and refetches findings) when processing finishes.
-              <DocumentRow key={`${document.id}:${document.status}:${document.findingsCount}`} document={document} onRetry={() => void retry(document)} />
+              // Keyed on status so a row starts fresh when processing finishes (and opens if it needs review).
+              <DocumentRow
+                key={`${document.id}:${document.status}`}
+                document={document}
+                onRetry={() => void retry(document)}
+                onDocumentChange={(updated) => setDocuments((list) => list.map((d) => (d.id === updated.id ? updated : d)))}
+              />
             ))}
           </ul>
         ) : (
@@ -267,27 +249,22 @@ export const UploadDocuments: React.FC = () => {
   );
 };
 
-const DocumentRow: React.FC<{ document: ProcessedDocument; onRetry: () => void }> = ({ document, onRetry }) => {
-  const [open, setOpen] = useState(false);
-  const [findings, setFindings] = useState<ExtractedFinding[] | null>(null);
-  const [error, setError] = useState('');
+const DocumentRow: React.FC<{
+  document: ProcessedDocument;
+  onRetry: () => void;
+  onDocumentChange: (document: ProcessedDocument) => void;
+}> = ({ document, onRetry, onDocumentChange }) => {
+  const needsReview = document.status === 'ready' && document.review.pending > 0;
+  // Open straight away when there is something to check.
+  const [open, setOpen] = useState(needsReview);
   const isPdf = document.mimeType === 'application/pdf';
   const busy = document.status === 'uploaded' || document.status === 'processing';
-
-  const toggle = async () => {
-    const next = !open;
-    setOpen(next);
-    if (next && findings === null) {
-      const token = getAuthToken();
-      if (!token) return;
-      try {
-        const { data } = await getDocumentFindings(token, document.id);
-        setFindings(data.findings);
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Could not load findings.');
-      }
-    }
-  };
+  const inHistory = document.status === 'ready' && !needsReview && document.review.confirmed > 0;
+  const chip = needsReview
+    ? { label: 'Needs review', style: 'bg-citron text-forest' }
+    : inHistory
+      ? { label: 'In history', style: STATUS_STYLES.ready }
+      : { label: STATUS_LABELS[document.status], style: STATUS_STYLES[document.status] };
 
   return (
     <li className="py-4">
@@ -301,9 +278,9 @@ const DocumentRow: React.FC<{ document: ProcessedDocument; onRetry: () => void }
             {document.status === 'ready' && ` · ${documentDateLabel(document)}`}
           </p>
         </div>
-        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[document.status]}`}>
+        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${chip.style}`}>
           {busy && <LoaderCircle size={12} className="animate-spin" />}
-          {STATUS_LABELS[document.status]}
+          {chip.label}
         </span>
       </div>
 
@@ -311,16 +288,22 @@ const DocumentRow: React.FC<{ document: ProcessedDocument; onRetry: () => void }
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 pl-[30px]">
           <p className="font-mono text-[11px] text-text-secondary">
             {document.stats.returned} findings extracted · {document.stats.accepted} verified · {document.stats.rejected} rejected by the quote check
+            {document.review.pending > 0 && ` · ${document.review.pending} to review`}
           </p>
-          <button type="button" onClick={() => void toggle()} aria-expanded={open} className="inline-flex items-center gap-1 text-xs font-semibold text-forest hover:underline">
-            {open ? 'Hide findings' : 'View findings'}
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="inline-flex items-center gap-1 text-xs font-semibold text-forest hover:underline">
+            {open ? 'Hide findings' : needsReview ? 'Review findings' : 'View findings'}
             <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
         </div>
       )}
 
       {document.status === 'uploaded' && (
-        <p className="mt-2 pl-[30px] text-xs text-text-secondary">Waiting for the processing service to pick this up.</p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 pl-[30px]">
+          <p className="text-xs text-text-secondary">Waiting for the processing service to pick this up.</p>
+          <button type="button" onClick={onRetry} className="inline-flex items-center gap-1 text-xs font-semibold text-forest hover:underline">
+            <RotateCw size={13} /> Retry now
+          </button>
+        </div>
       )}
 
       {document.status === 'failed' && (
@@ -335,45 +318,9 @@ const DocumentRow: React.FC<{ document: ProcessedDocument; onRetry: () => void }
         </div>
       )}
 
-      {document.status === 'uploaded' && (
-        <div className="mt-1 pl-[30px]">
-          <button type="button" onClick={onRetry} className="inline-flex items-center gap-1 text-xs font-semibold text-forest hover:underline">
-            <RotateCw size={13} /> Retry now
-          </button>
-        </div>
-      )}
-
-      {open && (
+      {open && document.status === 'ready' && (
         <div className="mt-3 pl-[30px]">
-          {error && <p className="text-sm text-warning">{error}</p>}
-          {!error && findings === null && <p className="text-sm text-text-secondary">Loading findings…</p>}
-          {findings && findings.length === 0 && (
-            <p className="text-sm text-text-secondary">
-              No findings could be verified in this document. A finding is only shown when its exact wording, and its values and units, are found in
-              the document. Clearer photos give better results.
-            </p>
-          )}
-          {findings && findings.length > 0 && (
-            <ul className="divide-y divide-border-subtle rounded-lg border border-border-subtle bg-white">
-              {findings.map((finding) => {
-                const qualifier = finding.subject !== 'patient' ? `${finding.subjectRelation ?? 'Family'} (not the patient)` : QUALIFIERS[finding.assertion];
-                const detail = findingDetail(finding);
-                return (
-                  <li key={finding.id} className="px-3 py-2.5">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-mono text-[10px] uppercase tracking-wide text-text-muted">{CATEGORY_LABELS[finding.category]}</span>
-                      <span className="text-sm font-medium text-text-main">{finding.name}</span>
-                      {detail && <span className="text-xs text-text-secondary">{detail}</span>}
-                      {qualifier && <span className="rounded bg-osco-bg px-1.5 py-0.5 text-[10px] font-medium text-text-secondary">{qualifier}</span>}
-                    </div>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      “{finding.quote}” <span className="font-mono text-[10px] text-text-muted">· p.{finding.page} · AI-extracted</span>
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <FindingsReview document={document} onDocumentChange={onDocumentChange} />
         </div>
       )}
     </li>

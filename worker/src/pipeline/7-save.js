@@ -47,6 +47,7 @@ export const save = async (client, { documentId, patientId, extractorVersion, do
 	await client.query(
 		`UPDATE claims SET retired_at = now()
 		 WHERE document_id = $1 AND source_type = 'ai_extracted' AND verification_status = 'unverified'
+		   AND review_status = 'pending' -- the patient's confirmations and removals survive a re-run
 		   AND retired_at IS NULL
 		   AND NOT (extractor_version = $2 AND fingerprint = ANY($3::char(64)[]))`,
 		[documentId, extractorVersion, keep],
