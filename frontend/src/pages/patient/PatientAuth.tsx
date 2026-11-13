@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { ArrowRight, HeartPulse } from 'lucide-react';
 
 export interface PatientAuthProps {
-  onRegister: (name: string, email: string, password: string) => void;
-  onLogin: (email: string, password: string) => void;
+  onRegister: (name: string, email: string, password: string) => Promise<void>;
+  onLogin: (email: string, password: string) => Promise<void>;
   onOpenDoctorPortal: () => void;
   error?: string;
+  isSubmitting: boolean;
 }
 
 export const PatientAuth: React.FC<PatientAuthProps> = ({
@@ -13,6 +14,7 @@ export const PatientAuth: React.FC<PatientAuthProps> = ({
   onLogin,
   onOpenDoctorPortal,
   error,
+  isSubmitting,
 }) => {
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [name, setName] = useState('');
@@ -21,17 +23,18 @@ export const PatientAuth: React.FC<PatientAuthProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formError, setFormError] = useState('');
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError('');
+    if (isSubmitting) return;
     if (mode === 'signup') {
       if (password !== confirmPassword) {
         setFormError('Passwords do not match.');
         return;
       }
-      onRegister(name, email, password);
+      await onRegister(name, email, password);
     } else {
-      onLogin(email, password);
+      await onLogin(email, password);
     }
   };
 
@@ -54,7 +57,7 @@ export const PatientAuth: React.FC<PatientAuthProps> = ({
               Keep your documents and patient-provided details together, ready when you need them.
             </p>
           </div>
-          <p className="text-xs text-white/55">Frontend demo · Information is saved in this browser only.</p>
+          <p className="text-xs text-white/55">Patient accounts are authenticated by OSCO.</p>
         </section>
 
         <section className="p-8 sm:p-12 flex flex-col justify-center">
@@ -121,15 +124,18 @@ export const PatientAuth: React.FC<PatientAuthProps> = ({
               )}
               {mode === 'signup' && (
                 <p className="text-xs leading-5 text-text-muted">
-                  Demo only: account credentials are stored in this browser’s local storage and are not secure authentication.
+                  Your password is used only to authenticate and is never stored in this browser.
                 </p>
               )}
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="w-full rounded-lg bg-forest text-white px-4 py-3 text-sm font-semibold hover:bg-forest-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest flex items-center justify-center gap-2"
               >
-                {mode === 'signup' ? 'Create account' : 'Log in'}
-                <ArrowRight size={16} />
+                {isSubmitting
+                  ? mode === 'signup' ? 'Creating account…' : 'Signing in…'
+                  : mode === 'signup' ? 'Create account' : 'Log in'}
+                {!isSubmitting && <ArrowRight size={16} />}
               </button>
             </form>
             <p className="mt-5 text-sm text-text-secondary text-center">

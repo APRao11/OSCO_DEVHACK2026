@@ -1,14 +1,15 @@
 import type { PersonalHealthInfo, TimelineEvent, UploadedDocument } from '../types/patient';
 
-const ACCOUNTS_KEY = 'osco.patientAccounts';
-const SESSION_KEY = 'osco.patientSession';
+const TOKEN_KEY = 'osco.patientToken';
+const LEGACY_ACCOUNTS_KEY = 'osco.patientAccounts';
+const LEGACY_SESSION_KEY = 'osco.patientSession';
 const DATA_KEY = 'osco.patientData';
 
 export interface PatientAccount {
   id: string;
   name: string;
   email: string;
-  password: string;
+  createdAt: string;
 }
 
 export interface PatientData {
@@ -31,63 +32,24 @@ const emptyPatientData = (): PatientData => ({
   timelineEvents: [],
 });
 
-const readAccounts = (): PatientAccount[] => {
-  const stored = localStorage.getItem(ACCOUNTS_KEY);
-  if (!stored) return [];
-  const accounts: unknown = JSON.parse(stored);
-  if (!Array.isArray(accounts)) {
-    throw new Error('Saved demo accounts are invalid. Clear this site’s local storage to restart.');
-  }
-  return accounts as PatientAccount[];
+const clearLegacyMockAuth = (): void => {
+  localStorage.removeItem(LEGACY_ACCOUNTS_KEY);
+  localStorage.removeItem(LEGACY_SESSION_KEY);
 };
 
-export const getCurrentPatient = (): PatientAccount | null => {
-  const patientId = localStorage.getItem(SESSION_KEY);
-  if (!patientId) return null;
-  return readAccounts().find((account) => account.id === patientId) ?? null;
+export const getAuthToken = (): string | null => {
+  clearLegacyMockAuth();
+  return sessionStorage.getItem(TOKEN_KEY);
 };
 
-export const findPatientAccountById = (patientId: string): PatientAccount | null => {
-  const normalizedId = patientId.trim().toLowerCase();
-  if (!normalizedId) return null;
-  return readAccounts().find((account) => account.id.toLowerCase() === normalizedId) ?? null;
+export const saveAuthToken = (token: string): void => {
+  clearLegacyMockAuth();
+  sessionStorage.setItem(TOKEN_KEY, token);
 };
 
-export const registerPatient = (
-  name: string,
-  email: string,
-  password: string,
-): PatientAccount => {
-  if (!name.trim()) throw new Error('Please enter your full name.');
-  const accounts = readAccounts();
-  const normalizedEmail = email.trim().toLowerCase();
-  if (accounts.some((account) => account.email === normalizedEmail)) {
-    throw new Error('An account with this email already exists. Please log in instead.');
-  }
-
-  let id: string;
-  do {
-    id = `OSCO-${crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
-  } while (accounts.some((account) => account.id === id));
-
-  const account = { id, name: name.trim(), email: normalizedEmail, password };
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify([...accounts, account]));
-  localStorage.setItem(SESSION_KEY, account.id);
-  return account;
-};
-
-export const loginPatient = (email: string, password: string): PatientAccount => {
-  const normalizedEmail = email.trim().toLowerCase();
-  const account = readAccounts().find(
-    (saved) => saved.email === normalizedEmail && saved.password === password,
-  );
-  if (!account) throw new Error('Email or password is incorrect.');
-  localStorage.setItem(SESSION_KEY, account.id);
-  return account;
-};
-
-export const logoutPatient = (): void => {
-  localStorage.removeItem(SESSION_KEY);
+export const clearAuthToken = (): void => {
+  sessionStorage.removeItem(TOKEN_KEY);
+  clearLegacyMockAuth();
 };
 
 const dataStorageKey = (patientId: string): string => `${DATA_KEY}.${patientId}`;
