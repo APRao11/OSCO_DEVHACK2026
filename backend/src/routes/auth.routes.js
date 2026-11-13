@@ -30,6 +30,8 @@ const publicPatient = (row) => ({
 	name: row.full_name,
 	email: row.email,
 	createdAt: row.created_at,
+	// The public Patient ID (OSCO-XXXXXXXX) a patient gives a doctor; never the internal UUID.
+	publicId: row.public_id,
 });
 
 const sessionResponse = (res, status, row) =>
@@ -63,7 +65,7 @@ router.post('/register', async (req, res, next) => {
 		const result = await pool.query(
 			`INSERT INTO patients (full_name, email, password_hash)
 			 VALUES ($1, $2, $3)
-			 RETURNING id, full_name, email, created_at`,
+			 RETURNING id, full_name, email, created_at, public_id`,
 			[normalizedName, normalizedEmail, passwordHash],
 		);
 		return sessionResponse(res, 201, result.rows[0]);
@@ -92,7 +94,7 @@ router.post('/login', async (req, res, next) => {
 
 	try {
 		const result = await pool.query(
-			`SELECT id, full_name, email, password_hash, created_at
+			`SELECT id, full_name, email, password_hash, created_at, public_id
 			 FROM patients
 			 WHERE lower(email) = $1
 			 LIMIT 1`,

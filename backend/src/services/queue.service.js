@@ -23,6 +23,20 @@ const getDocumentQueue = () => {
 	return documentQueue;
 };
 
+/**
+ * If Redis is unreachable, drop the queue so its connection does not keep retrying in the
+ * background (and keep the process alive); the next call connects afresh.
+ */
+const dropOnFailure = (which, promise) =>
+	promise.catch((error) => {
+		if (which === 'document' && documentQueue) {
+			const stale = documentQueue;
+			documentQueue = undefined;
+			stale.disconnect().catch(() => {});
+		}
+		throw error;
+	});
+
 const withTimeout = (promise) =>
 	Promise.race([
 		promise,
@@ -53,7 +67,7 @@ const JOB_OPTIONS = {
  * @returns {Promise<{ queued: true, state: string }>}  rejects if the queue is unreachable
  */
 export const enqueueDocument = (document) =>
-	withTimeout(
+	dropOnFailure('document', withTimeout(
 		(async () => {
 			const queue = getDocumentQueue();
 			const jobId = jobIdFor(document);
@@ -73,7 +87,7 @@ export const enqueueDocument = (document) =>
 			await queue.add('process-document', document, { ...JOB_OPTIONS, jobId });
 			return { queued: true, state: 'waiting' };
 		})(),
-	);
+	));
 
 // Must match worker/src/queues.js.
 export const RECONCILE_QUEUE = 'patient-reconcile';
@@ -98,6 +112,9 @@ export const enqueueReconcile = async (patientId, reason) => {
 		return true;
 	} catch (error) {
 		console.error(`Could not queue reconciliation for ${patientId}: ${error.message}`);
+		const stale = reconcileQueue;
+		reconcileQueue = undefined;
+		stale?.disconnect().catch(() => {});
 		return false;
 	}
 };

@@ -7,7 +7,7 @@ const router = Router();
 router.get('/me', requirePatientAuth, async (req, res, next) => {
 	try {
 		const result = await pool.query(
-			`SELECT id, full_name, email, created_at
+			`SELECT id, full_name, email, created_at, public_id
 			 FROM patients
 			 WHERE id = $1
 			 LIMIT 1`,
@@ -27,6 +27,7 @@ router.get('/me', requirePatientAuth, async (req, res, next) => {
 					name: patient.full_name,
 					email: patient.email,
 					createdAt: patient.created_at,
+					publicId: patient.public_id,
 				},
 			},
 		});

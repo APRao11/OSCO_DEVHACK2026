@@ -7,6 +7,7 @@ import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import accessRoutes from './routes/access.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import doctorAuthRoutes from './routes/doctorAuth.routes.js';
 import doctorRoutes from './routes/doctor.routes.js';
 import documentRoutes from './routes/documents.routes.js';
 import patientRoutes from './routes/patient.routes.js';
@@ -20,6 +21,7 @@ export const createApp = () => {
 	app.use(cors({ origin: env.corsOrigins, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] }));
 	app.use(express.json({ limit: '1mb' }));
 	app.use('/api/auth/patient', authRoutes);
+	app.use('/api/auth/doctor', doctorAuthRoutes);
 	app.use('/api/patients', patientRoutes);
 	app.use('/api/access', accessRoutes);
 	app.use('/api/documents', documentRoutes);

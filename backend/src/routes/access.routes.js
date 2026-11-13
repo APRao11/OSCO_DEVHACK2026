@@ -88,6 +88,13 @@ const decide = (decision) => async (req, res, next) => {
 			return fail(res, 409, 'DOCTOR_NOT_VERIFIED', 'This doctor is no longer verified, so access cannot be approved.');
 		}
 
+		// The patient grants what the doctor asked for, or less (view only), never more.
+		const granted = decision === 'approve' ? (req.body?.access ?? request.requested_access) : null;
+		if (decision === 'approve' && (!['read', 'edit'].includes(granted) || (granted === 'edit' && request.requested_access !== 'edit'))) {
+			await client.query('ROLLBACK');
+			return fail(res, 400, 'INVALID_INPUT', 'Access can be "read", or "edit" only when the doctor asked for it.');
+		}
+
 		const updated = await client.query(
 			`UPDATE doctor_access_requests
 			 SET status = $3,
@@ -96,18 +103,18 @@ const decide = (decision) => async (req, res, next) => {
 			     decided_at = now()
 			 WHERE id = $1 AND patient_id = $2
 			 RETURNING *`,
-			[requestId, patientId, decision === 'approve' ? 'approved' : 'denied', decision === 'approve' ? 'read' : null],
+			[requestId, patientId, decision === 'approve' ? 'approved' : 'denied', granted],
 		);
 
 		let session = null;
 		if (decision === 'approve') {
-			// Read-only, 60 minutes (section 5.6). The database trigger re-checks the approval.
+			// The level the patient granted, for 60 minutes (section 5.6). The database trigger re-checks the approval.
 			const inserted = await client.query(
 				`INSERT INTO doctor_access_sessions
 				   (request_id, patient_id, doctor_id, access_level, approved_by_patient_id, expires_at)
-				 VALUES ($1, $2, $3, 'read', $2, now() + make_interval(mins => $4))
+				 VALUES ($1, $2, $3, $5, $2, now() + make_interval(mins => $4))
 				 RETURNING id, access_level, started_at, expires_at`,
-				[requestId, patientId, request.doctor_id, ACCESS_WINDOW_MINUTES],
+				[requestId, patientId, request.doctor_id, ACCESS_WINDOW_MINUTES, granted],
 			);
 			const row = inserted.rows[0];
 			session = { id: row.id, accessLevel: row.access_level, startedAt: row.started_at, expiresAt: row.expires_at };
@@ -127,5 +134,70 @@ const decide = (decision) => async (req, res, next) => {
 
 router.post('/:id/approve', requirePatientAuth, decide('approve'));
 router.post('/:id/deny', requirePatientAuth, decide('deny'));
+
+/**
+ * GET /api/access: the patient's access requests and access history (6.1.8):
+ * pending requests to decide, active access with its time left, and past decisions.
+ */
+router.get('/', requirePatientAuth, async (req, res, next) => {
+	try {
+		const { rows } = await pool.query(
+			`SELECT r.id, r.purpose, r.requested_access, r.status, r.approved_access, r.requested_at, r.decided_at,
+			        (r.expires_at <= statement_timestamp()) AS request_expired,
+			        d.full_name AS doctor_name, d.verification_status AS doctor_status,
+			        s.id AS session_id, s.access_level, s.expires_at AS session_expires_at, s.revoked_at AS session_revoked_at
+			 FROM doctor_access_requests r
+			 JOIN doctors d ON d.id = r.doctor_id
+			 LEFT JOIN doctor_access_sessions s ON s.request_id = r.id
+			 WHERE r.patient_id = $1
+			 ORDER BY r.requested_at DESC
+			 LIMIT 50`,
+			[req.auth.patientId],
+		);
+		const now = Date.now();
+		const requests = rows.map((r) => {
+			const active = Boolean(r.session_id && !r.session_revoked_at && new Date(r.session_expires_at).getTime() > now);
+			let status = r.status;
+			if (r.status === 'pending' && r.request_expired) status = 'expired';
+			if (r.status === 'approved') status = active ? 'active' : r.session_revoked_at ? 'ended' : 'expired';
+			return {
+				id: r.id,
+				status,
+				purpose: r.purpose,
+				requestedAccess: r.requested_access,
+				approvedAccess: r.approved_access,
+				requestedAt: r.requested_at,
+				decidedAt: r.decided_at,
+				doctor: { name: r.doctor_name, verified: r.doctor_status === 'verified' },
+				session: r.session_id ? { id: r.session_id, accessLevel: r.access_level, expiresAt: r.session_expires_at, endedAt: r.session_revoked_at, active } : null,
+			};
+		});
+		return res.status(200).json({ data: { requests } });
+	} catch (error) {
+		return next(error);
+	}
+});
+
+/** End an active access early (6.1.8). The doctor loses access on their very next request. */
+router.post('/sessions/:sessionId/end', requirePatientAuth, async (req, res, next) => {
+	const { patientId } = req.auth;
+	if (!isUuid(req.params.sessionId)) return fail(res, 404, 'NOT_FOUND', 'Access not found.');
+	try {
+		const { rows } = await pool.query(
+			`UPDATE doctor_access_sessions SET revoked_at = now()
+			 WHERE id = $1 AND patient_id = $2 AND revoked_at IS NULL AND expires_at > now()
+			 RETURNING id, doctor_id`,
+			[req.params.sessionId, patientId],
+		);
+		if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No active access to end.');
+		await recordAuditSafely({
+			actorType: 'patient', actorId: patientId, patientId, action: 'access_session.end', resourceType: 'access_session',
+			resourceId: rows[0].id, outcome: 'allowed', details: { doctorId: rows[0].doctor_id }, ipAddress: requestIp(req),
+		});
+		return res.status(200).json({ data: { ended: true } });
+	} catch (error) {
+		return next(error);
+	}
+});
 
 export default router;

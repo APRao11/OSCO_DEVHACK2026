@@ -7,15 +7,9 @@ import { pool } from '../config/db.js';
 import { env } from '../config/env.js';
 import { isUuid, requirePatientAuth } from '../middleware/auth.js';
 import { recordAuditSafely, requestIp } from '../services/audit.service.js';
-import { enqueueDocument, enqueueReconcile } from '../services/queue.service.js';
-import {
-	confirmDocument,
-	CURRENT_VERSION,
-	editFinding,
-	FindingInputError,
-	listDocumentFindings,
-	setDismissed,
-} from '../services/findings.service.js';
+import { enqueueDocument } from '../services/queue.service.js';
+import { DOCUMENT_COLUMNS, loadDocument, publicDocument } from '../services/documents.service.js';
+import { findingReviewHandlers } from './findingReview.js';
 
 /**
  * Patient documents (MVP document sections 6.1.4, 5.5 and 8.9).
@@ -52,58 +46,7 @@ const sniffType = (buffer) => {
 	return null;
 };
 
-/** A filename safe to put inside a quoted Content-Disposition header. */
-const safeFilename = (name) => name.replace(/[^\w .()-]/g, '_');
-
 const fail = (res, status, code, message) => res.status(status).json({ error: { code, message } });
-
-const DOCUMENT_COLUMNS = `
-	d.id, d.original_filename, d.mime_type, d.byte_size, d.original_sha256, d.status, d.document_type,
-	d.page_count, d.extraction_stats, d.processing_error, d.created_at, d.processed_at,
-	to_char(d.document_date, 'YYYY-MM-DD') AS document_date, d.document_date_text, d.document_date_precision, d.document_date_alternatives,
-	(SELECT count(*)::int FROM claims c WHERE c.document_id = d.id AND c.review_status <> 'dismissed' AND ${CURRENT_VERSION}) AS findings_count,
-	(SELECT count(*)::int FROM claims c WHERE c.document_id = d.id AND c.review_status = 'pending' AND ${CURRENT_VERSION}) AS pending_count,
-	(SELECT count(*)::int FROM claims c WHERE c.document_id = d.id AND c.review_status = 'confirmed' AND ${CURRENT_VERSION}) AS confirmed_count,
-	(SELECT count(*)::int FROM claims c WHERE c.document_id = d.id AND c.review_status = 'dismissed' AND ${CURRENT_VERSION}) AS dismissed_count`;
-
-const publicDocument = (row) => ({
-	id: row.id,
-	name: row.original_filename,
-	mimeType: row.mime_type,
-	byteSize: Number(row.byte_size),
-	status: row.status,
-	documentType: row.document_type,
-	pageCount: row.page_count,
-	uploadedAt: row.created_at,
-	processedAt: row.processed_at,
-	error: row.processing_error,
-	findingsCount: row.findings_count ?? 0,
-	// Patient review: pending findings are not in the medical history until confirmed.
-	review: {
-		pending: row.pending_count ?? 0,
-		confirmed: row.confirmed_count ?? 0,
-		dismissed: row.dismissed_count ?? 0,
-	},
-	// The document's own date, verified against its text; null if absent or ambiguous.
-	documentDate: row.document_date,
-	documentDateText: row.document_date_text,
-	documentDatePrecision: row.document_date_precision,
-	documentDateAlternatives: row.document_date_alternatives,
-	stats: row.extraction_stats
-		? {
-				returned: row.extraction_stats.returned ?? 0,
-				accepted: row.extraction_stats.accepted ?? 0,
-				rejected: row.extraction_stats.rejected ?? 0,
-				rejectedByReason: row.extraction_stats.rejectedByReason ?? {},
-				pageCorrections: row.extraction_stats.pageCorrections ?? 0,
-			}
-		: null,
-});
-
-const loadDocument = async (documentId, patientId) => {
-	const { rows } = await pool.query(`SELECT ${DOCUMENT_COLUMNS} FROM documents d WHERE d.id = $1 AND d.patient_id = $2`, [documentId, patientId]);
-	return rows[0] ?? null;
-};
 
 /** Store the original under storage/originals/<patient>/<sha256><ext>; the same file is written once. */
 const storeOriginal = async (patientId, hash, ext, buffer) => {
@@ -208,137 +151,24 @@ router.get('/', requirePatientAuth, async (req, res, next) => {
 	}
 });
 
-router.get('/:id', requirePatientAuth, async (req, res, next) => {
-	const { patientId } = req.auth;
-	if (!isUuid(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'Document not found.');
-	try {
-		const row = await loadDocument(req.params.id, patientId);
-		if (!row) return fail(res, 404, 'NOT_FOUND', 'Document not found.');
-		// Current versions only (edits replace what they correct); rejected findings stay hidden (7.2.7).
-		const findings = await listDocumentFindings(patientId, row.id);
-		return res.status(200).json({ data: { document: publicDocument(row), findings } });
-	} catch (error) {
-		return next(error);
-	}
+// Review and viewing: the same handlers the doctor dashboard uses (findingReview.js).
+// The patient comes from the login token and acts as themselves.
+const review = findingReviewHandlers({
+	context: (req) => ({ patientId: req.auth.patientId, actor: { type: 'patient', id: req.auth.patientId } }),
+	scope: 'patient',
 });
 
-// ------------------------------------------------------------- patient review
-
-/** Run a review action in a transaction, audit it, and answer with the updated document. */
-const reviewAction = (action, run) => async (req, res, next) => {
-	const { patientId } = req.auth;
-	const { id: documentId, findingId } = req.params;
-	if (!isUuid(documentId) || (findingId !== undefined && !isUuid(findingId))) return fail(res, 404, 'NOT_FOUND', 'Not found.');
-	const client = await pool.connect();
-	try {
-		await client.query('BEGIN');
-		const doc = await client.query('SELECT id, status FROM documents WHERE id = $1 AND patient_id = $2 FOR UPDATE', [documentId, patientId]);
-		if (!doc.rowCount) {
-			await client.query('ROLLBACK');
-			return fail(res, 404, 'NOT_FOUND', 'Document not found.');
-		}
-		if (doc.rows[0].status !== 'ready') {
-			await client.query('ROLLBACK');
-			return fail(res, 409, 'NOT_READY', 'Findings can be reviewed once the document is Ready.');
-		}
-		const result = await run(client, { patientId, documentId, findingId, body: req.body });
-		if (!result) {
-			await client.query('ROLLBACK');
-			return fail(res, 404, 'NOT_FOUND', 'Finding not found.');
-		}
-		await client.query('COMMIT');
-
-		await recordAuditSafely({
-			actorType: 'patient', actorId: patientId, patientId, action, resourceType: findingId ? 'finding' : 'document',
-			resourceId: findingId ?? documentId, outcome: 'allowed', details: result.audit ?? {}, ipAddress: requestIp(req),
-		});
-		// The medical history only changes when confirmed findings change.
-		if (result.affectsHistory) await enqueueReconcile(patientId, action);
-
-		return res.status(200).json({
-			data: {
-				document: publicDocument(await loadDocument(documentId, patientId)),
-				findings: await listDocumentFindings(patientId, documentId),
-				...(result.finding ? { finding: result.finding } : {}),
-			},
-		});
-	} catch (error) {
-		await client.query('ROLLBACK').catch(() => {});
-		if (error instanceof FindingInputError) return fail(res, 400, 'INVALID_INPUT', error.message);
-		return next(error);
-	} finally {
-		client.release();
-	}
-};
-
+router.get('/:id', requirePatientAuth, review.get);
 /** Edit a finding: saved as a new version labelled as patient-edited; the original stays as evidence. */
-router.patch(
-	'/:id/findings/:findingId',
-	requirePatientAuth,
-	reviewAction('finding.edit', async (client, ctx) => {
-		const result = await editFinding(client, ctx);
-		if (!result) return null;
-		return {
-			finding: result.finding,
-			affectsHistory: result.finding.reviewStatus === 'confirmed',
-			audit: { changedFields: result.changedFields, previousId: result.previousId, newId: result.finding.id },
-		};
-	}),
-);
-
+router.patch('/:id/findings/:findingId', requirePatientAuth, review.edit);
 /** Remove a wrong finding. It is kept (dismissed), never shown in the history. */
-router.post(
-	'/:id/findings/:findingId/dismiss',
-	requirePatientAuth,
-	reviewAction('finding.dismiss', async (client, ctx) => {
-		const result = await setDismissed(client, { ...ctx, dismissed: true });
-		return result && { finding: result.finding, affectsHistory: result.wasConfirmed };
-	}),
-);
-
-/** Undo a removal: the finding goes back to waiting for review. */
-router.post(
-	'/:id/findings/:findingId/restore',
-	requirePatientAuth,
-	reviewAction('finding.restore', async (client, ctx) => {
-		const result = await setDismissed(client, { ...ctx, dismissed: false });
-		return result && { finding: result.finding, affectsHistory: false };
-	}),
-);
-
+router.post('/:id/findings/:findingId/dismiss', requirePatientAuth, review.dismiss);
+/** Undo a removal: the finding returns to where it was. */
+router.post('/:id/findings/:findingId/restore', requirePatientAuth, review.restore);
 /** Add the document's reviewed findings to the medical history. */
-router.post(
-	'/:id/confirm',
-	requirePatientAuth,
-	reviewAction('document.confirm_findings', async (client, ctx) => {
-		const confirmed = await confirmDocument(client, ctx);
-		return { affectsHistory: confirmed > 0, audit: { confirmed } };
-	}),
-);
-
-/** The original file, for the Source Viewer. Only the owning patient; never a public folder (6.1.6). */
-router.get('/:id/file', requirePatientAuth, async (req, res, next) => {
-	if (!isUuid(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'Document not found.');
-	try {
-		const { rows } = await pool.query('SELECT storage_key, mime_type, original_filename FROM documents WHERE id = $1 AND patient_id = $2', [req.params.id, req.auth.patientId]);
-		if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'Document not found.');
-		const root = env.documentStorageDir;
-		const path = resolve(root, rows[0].storage_key);
-		if (!path.startsWith(root + sep)) return fail(res, 404, 'NOT_FOUND', 'Document not found.');
-		res.set({
-			'Content-Type': rows[0].mime_type,
-			'Content-Disposition': `inline; filename="${safeFilename(rows[0].original_filename)}"`,
-			'Cache-Control': 'private, no-store',
-			// The frontend runs on another origin during development.
-			'Cross-Origin-Resource-Policy': 'cross-origin',
-		});
-		return res.sendFile(path, (error) => {
-			if (error && !res.headersSent) fail(res, 404, 'NOT_FOUND', 'The original file is missing.');
-		});
-	} catch (error) {
-		return next(error);
-	}
-});
+router.post('/:id/confirm', requirePatientAuth, review.confirm);
+/** The original file, for the Source Viewer. Only the owning patient. */
+router.get('/:id/file', requirePatientAuth, review.file);
 
 router.post('/:id/retry', requirePatientAuth, async (req, res, next) => {
 	const { patientId } = req.auth;
