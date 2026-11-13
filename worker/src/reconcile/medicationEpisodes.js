@@ -280,4 +280,5 @@ export const run = async ({ client, patientId, claims }) => {
 			[patientId, history.drug, JSON.stringify({ ...history, undated: undatedForDrug })],
 		);
 	}
+	return histories;
 };
