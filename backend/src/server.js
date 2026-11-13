@@ -12,6 +12,7 @@ import doctorRoutes from './routes/doctor.routes.js';
 import documentRoutes from './routes/documents.routes.js';
 import patientRoutes from './routes/patient.routes.js';
 import recordsRoutes from './routes/records.routes.js';
+import chatRoutes from './routes/chat.routes.js';
 
 export const createApp = () => {
 	const app = express();
@@ -26,6 +27,7 @@ export const createApp = () => {
 	app.use('/api/access', accessRoutes);
 	app.use('/api/documents', documentRoutes);
 	app.use('/api/me', recordsRoutes);
+	app.use('/api/me', chatRoutes);
 	app.use('/api/doctor', doctorRoutes);
 
 	app.get('/health', (_req, res) => {

@@ -9,6 +9,7 @@ import { ClinicalRecordError, createClinicalRecord } from '../services/clinicalR
 import { verifyFinding } from '../services/findings.service.js';
 import { enqueueReconcile } from '../services/queue.service.js';
 import { findingReviewHandlers } from './findingReview.js';
+import { chatHandler } from './chat.routes.js';
 
 /**
  * Doctor-only routes (MVP document 6.2, 7.1, 8.9). The guard is applied to the
@@ -173,6 +174,17 @@ const review = findingReviewHandlers({
 	context: (req) => ({ patientId: req.patientAccess.patientId, actor: { type: 'doctor', id: req.doctor.id } }),
 	scope: 'doctor',
 });
+
+/** Questions about the patient's records, as this doctor, under the patient's consent (6.2.9). */
+router.post(
+	'/patients/:publicId/chat',
+	scope.read,
+	chatHandler((req) => ({
+		patientId: req.patientAccess.patientId,
+		actor: { type: 'doctor', id: req.doctor.id },
+		fileUrl: (id) => `/api/doctor/patients/${req.patientAccess.publicId}/documents/${id}/file`,
+	})),
+);
 
 router.get('/patients/:publicId/documents/:id', scope.read, review.get);
 router.get('/patients/:publicId/documents/:id/file', scope.read, review.file);
