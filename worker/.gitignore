@@ -1,0 +1,3 @@
+# Cached LLM extraction results (may contain patient data)
+src/cache/*
+!src/cache/.gitkeep

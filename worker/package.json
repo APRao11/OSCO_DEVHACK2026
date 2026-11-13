@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "dev": "nodemon src/worker.js",
+    "start": "node src/worker.js",
+    "test": "node --test tests/"
   },
   "dependencies": {
     "bullmq": "^5.58.5",
     "dotenv": "^16.4.7",
     "ioredis": "^5.6.1",
+    "pdfjs-dist": "^5.7.284",
     "pg": "^8.16.3"
   },
   "devDependencies": {
