@@ -61,3 +61,13 @@
   font-family: 'Instrument Serif', Georgia, serif;
   letter-spacing: -0.01em;
 }
+
+/* Source Viewer: the verified quote, highlighted over the PDF text layer.
+   Text-layer glyphs are transparent so the canvas text shows through. */
+.osco-source-page .textLayer mark.osco-quote {
+  background-color: rgb(199 217 87 / 0.55);
+  box-shadow: 0 0 0 2px rgb(199 217 87 / 0.55);
+  border-radius: 2px;
+  color: transparent;
+  padding: 0;
+}

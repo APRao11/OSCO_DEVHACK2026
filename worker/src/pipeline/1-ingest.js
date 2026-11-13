@@ -17,12 +17,18 @@ const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/tiff
  * baseline, and a space is inserted where two fragments have a visible gap but
  * neither carries its own whitespace.
  */
-export const textFromItems = (items) => {
+//
+// MUST stay identical to layoutTextItems() in frontend/src/utils/pdfTextLayout.js:
+// the Source Viewer uses the same ranges to turn quote_start / quote_end back into
+// highlighted spans. tests/pdfTextLayout.parity.test.js checks the two agree.
+// Nothing here may move an earlier offset (only the trailing trim is applied).
+export const layoutTextItems = (items) => {
 	let text = '';
 	let prev = null;
+	const ranges = items.map(() => null);
 
-	for (const item of items) {
-		if (typeof item.str !== 'string') continue; // marked-content items carry no text
+	items.forEach((item, index) => {
+		if (typeof item.str !== 'string') return; // marked-content items carry no text
 		const [, , , scaleY, x, y] = item.transform;
 		const fontSize = Math.abs(scaleY) || item.height || 10;
 
@@ -30,21 +36,26 @@ export const textFromItems = (items) => {
 			const newLine = !prev.hasEOL && Math.abs(y - prev.y) > fontSize * 0.5;
 			const gap = x - (prev.x + prev.width);
 			const needsSpace =
-				!newLine &&
-				!prev.hasEOL &&
-				gap > fontSize * 0.15 &&
-				!/\s$/u.test(text) &&
-				!/^\s/u.test(item.str);
+				!newLine && !prev.hasEOL && gap > fontSize * 0.15 && !/\s$/u.test(text) && !/^\s/u.test(item.str);
 			if (newLine) text += '\n';
 			else if (needsSpace) text += ' ';
 		}
 
+		const start = text.length;
 		text += item.str;
+		ranges[index] = [start, text.length];
 		if (item.hasEOL) text += '\n';
 		if (item.str || item.hasEOL) prev = { x, y, width: item.width, hasEOL: item.hasEOL };
-	}
-	return text.replace(/[ \t]+\n/g, '\n').trimEnd();
+	});
+
+	const trimmed = text.trimEnd();
+	return {
+		text: trimmed,
+		ranges: ranges.map((range) => (range ? [Math.min(range[0], trimmed.length), Math.min(range[1], trimmed.length)] : null)),
+	};
 };
+
+export const textFromItems = (items) => layoutTextItems(items).text;
 
 /** Read the text layer of every page of a PDF buffer. */
 export const extractPdfPages = async (buffer, { minTextLayerChars = 20 } = {}) => {

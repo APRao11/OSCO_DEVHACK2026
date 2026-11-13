@@ -15,6 +15,14 @@ import { HealthAssistantWidget } from '../patient/HealthAssistantWidget';
 
 import { TimelineDetailDrawer } from '../patient/TimelineDetailDrawer';
 import { DocumentViewerModal } from '../patient/DocumentViewerModal';
+import { LazySourceViewer } from '../records/LazySourceViewer';
+import { DEMO_RECORDS } from '../../records/demoRecords';
+import { sourceTargetFor } from '../../records/source';
+import type { SourceTarget } from '../../types/records';
+
+// There is no records API yet, so the timeline shows the synthetic demo patient.
+const DEMO_NOTICE =
+  'Showing the synthetic demo patient. Your own uploads will appear here once the records API is connected.';
 
 export interface PatientPortalLayoutProps {
   activeItemId: string;
@@ -39,6 +47,7 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
     null
   );
   const [selectedDocument, setSelectedDocument] = useState<UploadedDocument | null>(null);
+  const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(null);
 
   // Handler to open a document by name (e.g. from timeline drawer or citations)
   const handleOpenDocByName = (docName: string) => {
@@ -100,8 +109,9 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
       case 'medical-history':
         return (
           <MedicalHistoryTimeline
-            events={timelineEvents}
-            onSelectEvent={(ev) => setSelectedTimelineEvent(ev)}
+            records={DEMO_RECORDS}
+            onOpenSource={(findingId) => setSourceTarget(sourceTargetFor(DEMO_RECORDS, findingId))}
+            notice={DEMO_NOTICE}
           />
         );
 
@@ -144,6 +154,8 @@ export const PatientPortalLayout: React.FC<PatientPortalLayoutProps> = ({
         document={selectedDocument}
         onClose={() => setSelectedDocument(null)}
       />
+
+      <LazySourceViewer target={sourceTarget} onClose={() => setSourceTarget(null)} />
 
       <HealthAssistantWidget />
     </>

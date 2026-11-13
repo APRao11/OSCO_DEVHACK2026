@@ -1,0 +1,42 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 441 >>
+stream
+BT /F2 16 Tf 56 754 Td (Metro Diagnostics Laboratory) Tj ET
+BT /F2 11 Tf 56 735 Td (Laboratory Report) Tj ET
+BT /F1 11 Tf 56 716 Td (Sample date: 04/05/2021) Tj ET
+BT /F1 11 Tf 56 697 Td (Test / Result / Unit / Reference range) Tj ET
+BT /F1 11 Tf 56 678 Td (HbA1c 7.8 % \(4.0 - 5.6\)) Tj ET
+BT /F1 11 Tf 56 659 Td (Fasting plasma glucose 142 mg/dL \(70 - 99\)) Tj ET
+BT /F1 11 Tf 56 640 Td (Synthetic data - for software testing only.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000212 00000 n 
+0000000314 00000 n 
+0000000806 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+942
+%%EOF

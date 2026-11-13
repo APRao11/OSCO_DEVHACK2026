@@ -1,0 +1,44 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 556 >>
+stream
+BT /F2 16 Tf 56 754 Td (Sunrise Medical Centre) Tj ET
+BT /F2 11 Tf 56 735 Td (Prescription) Tj ET
+BT /F1 11 Tf 56 716 Td (Date: 02 Feb 2021) Tj ET
+BT /F2 11 Tf 56 697 Td (Rx) Tj ET
+BT /F1 11 Tf 56 678 Td (1. Tab. Glycomet - dose changed to 1000 mg once daily) Tj ET
+BT /F1 11 Tf 56 659 Td (2. Tab. Pantoprazole once daily before breakfast - start) Tj ET
+BT /F1 11 Tf 56 640 Td (3. Continue Tab. Atorvastatin 10 mg once daily at night) Tj ET
+BT /F1 11 Tf 56 621 Td (Dr S. Rao) Tj ET
+BT /F1 11 Tf 56 602 Td (Synthetic data - for software testing only.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000212 00000 n 
+0000000314 00000 n 
+0000000921 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1057
+%%EOF

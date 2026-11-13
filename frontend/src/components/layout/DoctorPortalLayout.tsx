@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import type { PatientContext } from '../../types/navigation';
 import type { TimelineEvent, UploadedDocument, PersonalHealthInfo } from '../../types/patient';
-import type { ReviewItem, MissingInfoGap, VerificationStatus } from '../../types/doctor';
+import type { ReviewItem, VerificationStatus } from '../../types/doctor';
 import {
   INITIAL_TIMELINE_EVENTS,
   INITIAL_DOCUMENTS,
   INITIAL_PERSONAL_HEALTH_INFO,
 } from '../../mock/patientMockData';
-import { INITIAL_REVIEW_ITEMS, MOCK_MISSING_INFO_GAPS } from '../../mock/doctorMockData';
+import { INITIAL_REVIEW_ITEMS } from '../../mock/doctorMockData';
 import { loadPatientData, savePatientData } from '../../auth/patientStorage';
 import { PatientIdentification } from '../../pages/doctor/PatientIdentification';
 import { EmergencyBrief } from '../../pages/doctor/EmergencyBrief';
-import { DoctorMedicalHistory } from '../../pages/doctor/DoctorMedicalHistory';
+import { MedicalHistoryTimeline } from '../../pages/patient/MedicalHistoryTimeline';
+import { LazySourceViewer } from '../records/LazySourceViewer';
+import { DEMO_RECORDS, EMPTY_RECORDS } from '../../records/demoRecords';
+import { sourceTargetFor } from '../../records/source';
+import type { SourceTarget } from '../../types/records';
 import { ReviewVerification } from '../../pages/doctor/ReviewVerification';
 import { DoctorDocuments } from '../../pages/doctor/DoctorDocuments';
 import { AddClinicalRecord } from '../../pages/doctor/AddClinicalRecord';
@@ -63,9 +67,11 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>(
     isDemoPatient ? INITIAL_REVIEW_ITEMS : [],
   );
-  const [missingGaps] = useState<MissingInfoGap[]>(
-    isDemoPatient ? MOCK_MISSING_INFO_GAPS : [],
-  );
+  // Document-derived records. Only the demo patient has any until the records API exists;
+  // everyone else gets an empty set, so the brief shows its explicit empty states.
+  const records = isDemoPatient ? DEMO_RECORDS : EMPTY_RECORDS;
+  const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(null);
+  const openSource = (findingId: string) => setSourceTarget(sourceTargetFor(records, findingId));
   const [selectedTimelineEvent, setSelectedTimelineEvent] = useState<TimelineEvent | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<UploadedDocument | null>(null);
 
@@ -115,9 +121,10 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
     switch (activeNavItemId) {
       case 'medical-history':
         return (
-          <DoctorMedicalHistory
-            events={timelineEvents}
-            onSelectEvent={setSelectedTimelineEvent}
+          <MedicalHistoryTimeline
+            records={records}
+            onOpenSource={openSource}
+            eyebrow={`${currentPatient.name} · read-only`}
           />
         );
       case 'review-verification':
@@ -157,12 +164,9 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
         return (
           <EmergencyBrief
             patient={currentPatient}
-            healthInfo={patientData.healthInfo}
-            timelineEvents={timelineEvents}
-            reviewItems={reviewItems}
-            missingGaps={missingGaps}
-            onOpenDocument={handleOpenDocByName}
-            onOpenTimelineEvent={setSelectedTimelineEvent}
+            records={records}
+            onOpenSource={openSource}
+            onOpenTimeline={() => onNavigate('medical-history')}
             onNavigateReview={() => onNavigate('review-verification')}
           />
         );
@@ -181,6 +185,7 @@ export const DoctorPortalLayout: React.FC<DoctorPortalLayoutProps> = ({
         document={selectedDocument}
         onClose={() => setSelectedDocument(null)}
       />
+      <LazySourceViewer target={sourceTarget} onClose={() => setSourceTarget(null)} />
     </>
   );
 };

@@ -1,0 +1,62 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 662 >>
+stream
+BT /F2 16 Tf 56 754 Td (St. Mary's Hospital) Tj ET
+BT /F2 11 Tf 56 735 Td (Discharge Summary) Tj ET
+BT /F1 11 Tf 56 716 Td (Date of admission: 10 Jun 2024) Tj ET
+BT /F1 11 Tf 56 697 Td (Date of discharge: 14 Jun 2024) Tj ET
+BT /F1 11 Tf 56 678 Td (Diagnosis: Community-acquired pneumonia, right lower lobe.) Tj ET
+BT /F1 11 Tf 56 659 Td (Chest X-ray: right lower lobe consolidation.) Tj ET
+BT /F1 11 Tf 56 640 Td (Query asthma - for review in clinic.) Tj ET
+BT /F1 11 Tf 56 621 Td (Known case of type 2 diabetes mellitus - on treatment.) Tj ET
+BT /F1 11 Tf 56 602 Td (Allergies: No known drug allergies.) Tj ET
+BT /F1 11 Tf 56 583 Td (Continued on page 2.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 496 >>
+stream
+BT /F2 11 Tf 56 761 Td (Medications on discharge) Tj ET
+BT /F1 11 Tf 56 742 Td (1. Tab. Metformin 1000 mg once daily - continue) Tj ET
+BT /F1 11 Tf 56 723 Td (2. Tab. Azithromycin 500 mg once daily for 3 days - start) Tj ET
+BT /F1 11 Tf 56 704 Td (3. Tab. Atorvastatin 10 mg - stopped \(muscle pain\)) Tj ET
+BT /F1 11 Tf 56 685 Td (Follow-up: diabetes clinic in 2 weeks.) Tj ET
+BT /F1 11 Tf 56 666 Td (Dr K. Thomas) Tj ET
+BT /F1 11 Tf 56 647 Td (Synthetic data - for software testing only.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000320 00000 n 
+0000001033 00000 n 
+0000001169 00000 n 
+0000001716 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1852
+%%EOF
